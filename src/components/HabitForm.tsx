@@ -28,19 +28,9 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
   const isEditing = !!habit;
 
   useEffect(() => {
-    const scrollY = window.scrollY;
     document.body.style.overflow = "hidden";
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.left = "0";
-    document.body.style.right = "0";
     return () => {
       document.body.style.overflow = "";
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.left = "";
-      document.body.style.right = "";
-      window.scrollTo(0, scrollY);
     };
   }, []);
 
@@ -150,7 +140,6 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Morning run"
-              autoFocus
               required
               maxLength={40}
               style={{
@@ -160,7 +149,7 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
                 background: "var(--color-surface-dim)",
                 border: "1px solid var(--color-border)",
                 borderRadius: "var(--radius-sm)",
-                fontSize: "var(--text-base)",
+                fontSize: 16,
                 outline: "none",
               }}
             />
