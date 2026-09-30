@@ -104,8 +104,7 @@ export function HabitCard({ habit, completed, streak, onToggle, onEdit }: HabitC
               fontWeight: 600,
               color: "var(--color-text)",
               letterSpacing: "-0.01em",
-              textDecoration: completed ? "line-through" : "none",
-              opacity: completed ? 0.5 : 1,
+              opacity: completed ? 0.55 : 1,
               transition: "opacity 200ms ease",
             }}
           >

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { X } from "@phosphor-icons/react";
 import { HABIT_COLORS, HABIT_ICONS } from "../types";
 import type { Habit, HabitColor } from "../types";
@@ -23,6 +23,7 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
   const [frequency, setFrequency] = useState<"daily" | "weekly">(
     habit?.frequency ?? "daily"
   );
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const colorSet = HABIT_COLORS[color];
   const isEditing = !!habit;
@@ -34,10 +35,30 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
     };
   }, []);
 
+  const handleEscape = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    },
+    [onClose]
+  );
+
+  useEffect(() => {
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [handleEscape]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     onSave({ name: name.trim(), icon, color, frequency });
+  };
+
+  const handleDelete = () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    onDelete?.();
   };
 
   return (
@@ -65,6 +86,8 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
 
       <form
         onSubmit={handleSubmit}
+        role="dialog"
+        aria-label={isEditing ? "Edit habit" : "New habit"}
         style={{
           position: "relative",
           width: "100%",
@@ -78,13 +101,6 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
           animation: "slideUp 300ms cubic-bezier(0.34, 1.56, 0.64, 1)",
         }}
       >
-        <style>{`
-          @keyframes slideUp {
-            from { transform: translateY(100%); }
-            to { transform: translateY(0); }
-          }
-        `}</style>
-
         <div
           style={{
             display: "flex",
@@ -107,8 +123,8 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
             onClick={onClose}
             aria-label="Close"
             style={{
-              width: 32,
-              height: 32,
+              width: 44,
+              height: 44,
               borderRadius: "50%",
               background: "var(--color-surface-dim)",
               display: "flex",
@@ -167,7 +183,7 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
             >
               Color
             </label>
-            <div style={{ display: "flex", gap: "var(--space-3)" }}>
+            <div style={{ display: "flex", gap: "var(--space-2)" }}>
               {(Object.keys(HABIT_COLORS) as HabitColor[]).map((c) => (
                 <button
                   key={c}
@@ -176,20 +192,34 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
                   aria-pressed={color === c}
                   onClick={() => setColor(c)}
                   style={{
-                    width: 36,
-                    height: 36,
+                    width: 44,
+                    height: 44,
                     borderRadius: "50%",
-                    background: HABIT_COLORS[c].fill,
-                    border:
-                      color === c
-                        ? "3px solid var(--color-text)"
-                        : "3px solid transparent",
-                    outline:
-                      color === c ? "2px solid var(--color-surface)" : "none",
-                    transition: "all 150ms ease",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "transparent",
+                    padding: 0,
                     cursor: "pointer",
                   }}
-                />
+                >
+                  <span
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: "50%",
+                      background: HABIT_COLORS[c].fill,
+                      display: "block",
+                      border:
+                        color === c
+                          ? "3px solid var(--color-text)"
+                          : "3px solid transparent",
+                      outline:
+                        color === c ? "2px solid var(--color-surface)" : "none",
+                      transition: "all 150ms ease",
+                    }}
+                  />
+                </button>
               ))}
             </div>
           </div>
@@ -270,18 +300,24 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
           {isEditing && onDelete && (
             <button
               type="button"
-              onClick={onDelete}
+              onClick={handleDelete}
               style={{
                 height: 48,
                 padding: "0 var(--space-5)",
                 borderRadius: "var(--radius-sm)",
-                border: "1px solid var(--color-border)",
+                border: confirmDelete
+                  ? "1px solid #E5534B"
+                  : "1px solid var(--color-border)",
+                background: confirmDelete
+                  ? "rgba(229, 83, 75, 0.1)"
+                  : "transparent",
                 color: "#E5534B",
                 fontWeight: 600,
                 fontSize: "var(--text-base)",
+                transition: "all 150ms ease",
               }}
             >
-              Delete
+              {confirmDelete ? "Confirm delete" : "Delete"}
             </button>
           )}
           <button

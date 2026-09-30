@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import type { Habit, Completion, HabitColor } from "../types";
 
 const HABITS_KEY = "pulse-habits";
@@ -169,15 +169,28 @@ export function useHabits() {
     [completions]
   );
 
-  const todayKey = useMemo(() => toDateKey(), []);
+  const [todayKey, setTodayKey] = useState(() => toDateKey());
+
+  useEffect(() => {
+    const check = () => {
+      const now = toDateKey();
+      if (now !== todayKey) setTodayKey(now);
+    };
+    document.addEventListener("visibilitychange", check);
+    const interval = setInterval(check, 60_000);
+    return () => {
+      document.removeEventListener("visibilitychange", check);
+      clearInterval(interval);
+    };
+  }, [todayKey]);
 
   const todaysHabits = useMemo(() => {
-    const day = new Date().getDay();
     return habits.filter((h) => {
       if (h.frequency === "daily") return true;
+      const day = new Date().getDay();
       return day === 1;
     });
-  }, [habits]);
+  }, [habits, todayKey]);
 
   const todaysProgress = useMemo(() => {
     if (todaysHabits.length === 0) return { done: 0, total: 0 };
@@ -186,6 +199,11 @@ export function useHabits() {
     ).length;
     return { done, total: todaysHabits.length };
   }, [todaysHabits, completions, todayKey]);
+
+  const hasHiddenWeekly = useMemo(() => {
+    const day = new Date().getDay();
+    return day !== 1 && habits.some((h) => h.frequency === "weekly");
+  }, [habits, todayKey]);
 
   return {
     habits,
@@ -201,5 +219,6 @@ export function useHabits() {
     todaysHabits,
     todaysProgress,
     todayKey,
+    hasHiddenWeekly,
   };
 }

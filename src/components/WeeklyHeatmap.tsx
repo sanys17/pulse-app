@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+
 interface WeeklyHeatmapProps {
   data: { date: string; completed: boolean }[][];
   color: string;
@@ -5,23 +7,11 @@ interface WeeklyHeatmapProps {
 
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
-function getHeatLevel(weekData: { date: string; completed: boolean }[][]): Map<string, number> {
-  const map = new Map<string, number>();
-  const allDates = weekData.flat();
-
-  for (const d of allDates) {
-    map.set(d.date, d.completed ? 1 : 0);
-  }
-
-  return map;
-}
-
 export function WeeklyHeatmap({ data, color }: WeeklyHeatmapProps) {
   const today = new Date().toISOString().slice(0, 10);
-  const levels = getHeatLevel(data);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
       <div
         style={{
           display: "grid",
@@ -47,9 +37,8 @@ export function WeeklyHeatmap({ data, color }: WeeklyHeatmapProps) {
         ))}
 
         {data.map((week, wi) => (
-          <>
+          <Fragment key={wi}>
             <span
-              key={`label-${wi}`}
               style={{
                 fontSize: 10,
                 color: "var(--color-text-secondary)",
@@ -61,7 +50,6 @@ export function WeeklyHeatmap({ data, color }: WeeklyHeatmapProps) {
               {wi === data.length - 1 ? "Now" : `${data.length - 1 - wi}w`}
             </span>
             {week.map((day) => {
-              const level = levels.get(day.date) ?? 0;
               const isToday = day.date === today;
               const isFuture = day.date > today;
 
@@ -74,10 +62,10 @@ export function WeeklyHeatmap({ data, color }: WeeklyHeatmapProps) {
                     borderRadius: 3,
                     background: isFuture
                       ? "transparent"
-                      : level > 0
+                      : day.completed
                       ? color
                       : "var(--color-surface-dim)",
-                    opacity: isFuture ? 0.2 : level > 0 ? 0.85 : 1,
+                    opacity: isFuture ? 0.2 : day.completed ? 0.85 : 1,
                     border: isToday
                       ? "1.5px solid var(--color-text-secondary)"
                       : "1px solid transparent",
@@ -86,8 +74,45 @@ export function WeeklyHeatmap({ data, color }: WeeklyHeatmapProps) {
                 />
               );
             })}
-          </>
+          </Fragment>
         ))}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-3)",
+          justifyContent: "flex-end",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <div
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 2,
+              background: "var(--color-surface-dim)",
+            }}
+          />
+          <span style={{ fontSize: 10, color: "var(--color-text-secondary)" }}>
+            Not done
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <div
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 2,
+              background: color,
+              opacity: 0.85,
+            }}
+          />
+          <span style={{ fontSize: 10, color: "var(--color-text-secondary)" }}>
+            Done
+          </span>
+        </div>
       </div>
     </div>
   );

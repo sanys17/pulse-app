@@ -240,6 +240,22 @@ button {
   }
 }
 
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cardPulse {
+  0% { box-shadow: 0 0 0 0 var(--color-complete); }
+  50% { box-shadow: 0 0 0 4px var(--color-complete-bg); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

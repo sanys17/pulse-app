@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useHabitsContext } from "../context/HabitsContext";
 import { HabitCard } from "../components/HabitCard";
 import type { Habit } from "../types";
@@ -7,12 +8,14 @@ interface HomeProps {
 }
 
 export function Home({ onEditHabit }: HomeProps) {
+  const navigate = useNavigate();
   const {
     todaysHabits,
     todaysProgress,
     isCompleted,
     toggleCompletion,
     getStreak,
+    hasHiddenWeekly,
   } = useHabitsContext();
 
   const greeting = (() => {
@@ -139,8 +142,24 @@ export function Home({ onEditHabit }: HomeProps) {
               No habits yet
             </p>
             <p style={{ fontSize: "var(--text-sm)", marginTop: "var(--space-2)" }}>
-              Head to the Habits tab to create your first one
+              Start building your daily routine
             </p>
+            <button
+              onClick={() => navigate("/habits")}
+              style={{
+                marginTop: "var(--space-4)",
+                padding: "var(--space-3) var(--space-6)",
+                background: "var(--color-text)",
+                color: "var(--color-canvas)",
+                borderRadius: "var(--radius-md)",
+                fontSize: "var(--text-sm)",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "opacity 150ms ease",
+              }}
+            >
+              Add your first habit
+            </button>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
@@ -155,6 +174,19 @@ export function Home({ onEditHabit }: HomeProps) {
               />
             ))}
           </div>
+        )}
+
+        {hasHiddenWeekly && (
+          <p
+            style={{
+              fontSize: "var(--text-sm)",
+              color: "var(--color-text-secondary)",
+              textAlign: "center",
+              marginTop: "var(--space-2)",
+            }}
+          >
+            Weekly habits appear on Mondays
+          </p>
         )}
       </section>
     </div>

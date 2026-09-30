@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus } from "@phosphor-icons/react";
+import { useState, useEffect } from "react";
+import { Plus, PencilSimple } from "@phosphor-icons/react";
 import { useHabitsContext } from "../context/HabitsContext";
 import { HabitCard } from "../components/HabitCard";
 import { HabitForm } from "../components/HabitForm";
@@ -22,6 +22,14 @@ export function Habits() {
   const [showForm, setShowForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | undefined>();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (savedId) {
+      const timer = setTimeout(() => setSavedId(null), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [savedId]);
 
   const handleSave = (data: {
     name: string;
@@ -31,8 +39,10 @@ export function Habits() {
   }) => {
     if (editingHabit) {
       updateHabit(editingHabit.id, data);
+      setSavedId(editingHabit.id);
     } else {
-      addHabit(data);
+      const habit = addHabit(data);
+      setSavedId(habit.id);
     }
     setShowForm(false);
     setEditingHabit(undefined);
@@ -50,6 +60,10 @@ export function Habits() {
   const handleEdit = (habit: Habit) => {
     setEditingHabit(habit);
     setShowForm(true);
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpandedId(expandedId === id ? null : id);
   };
 
   return (
@@ -111,21 +125,19 @@ export function Habits() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
           {habits.map((habit) => (
-            <div key={habit.id}>
-              <div
-                onClick={() =>
-                  setExpandedId(expandedId === habit.id ? null : habit.id)
-                }
-                style={{ cursor: "pointer" }}
-              >
-                <HabitCard
-                  habit={habit}
-                  completed={isCompleted(habit.id)}
-                  streak={getStreak(habit.id)}
-                  onToggle={() => toggleCompletion(habit.id)}
-                  onEdit={() => handleEdit(habit)}
-                />
-              </div>
+            <div
+              key={habit.id}
+              style={{
+                animation: savedId === habit.id ? "cardPulse 600ms ease" : "none",
+              }}
+            >
+              <HabitCard
+                habit={habit}
+                completed={isCompleted(habit.id)}
+                streak={getStreak(habit.id)}
+                onToggle={() => toggleCompletion(habit.id)}
+                onEdit={() => toggleExpand(habit.id)}
+              />
 
               {expandedId === habit.id && (
                 <div
@@ -140,12 +152,6 @@ export function Habits() {
                     animation: "fadeIn 200ms ease",
                   }}
                 >
-                  <style>{`
-                    @keyframes fadeIn {
-                      from { opacity: 0; transform: translateY(-4px); }
-                      to { opacity: 1; transform: translateY(0); }
-                    }
-                  `}</style>
                   <div
                     style={{
                       display: "flex",
@@ -163,14 +169,32 @@ export function Habits() {
                     >
                       Last 4 weeks
                     </span>
-                    <span
-                      style={{
-                        fontSize: "var(--text-sm)",
-                        color: "var(--color-text-secondary)",
-                      }}
-                    >
-                      {getStreak(habit.id)} day streak
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                      <span
+                        style={{
+                          fontSize: "var(--text-sm)",
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        {getStreak(habit.id)} day streak
+                      </span>
+                      <button
+                        onClick={() => handleEdit(habit)}
+                        aria-label={`Edit ${habit.name}`}
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: "var(--radius-sm)",
+                          background: "var(--color-surface-dim)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <PencilSimple size={14} weight="bold" color="var(--color-text-secondary)" />
+                      </button>
+                    </div>
                   </div>
                   <WeeklyHeatmap
                     data={getWeeklyData(habit.id)}
