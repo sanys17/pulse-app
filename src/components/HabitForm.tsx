@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X } from "@phosphor-icons/react";
 import { HABIT_COLORS, HABIT_ICONS } from "../types";
 import type { Habit, HabitColor } from "../types";
@@ -26,6 +26,23 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
 
   const colorSet = HABIT_COLORS[color];
   const isEditing = !!habit;
+
+  useEffect(() => {
+    const scrollY = window.scrollY;
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    return () => {
+      document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      window.scrollTo(0, scrollY);
+    };
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
