@@ -33,14 +33,6 @@ export function useHabits() {
     load(COMPLETIONS_KEY, [])
   );
 
-  const persist = useCallback(
-    (h: Habit[], c: Completion[]) => {
-      save(HABITS_KEY, h);
-      save(COMPLETIONS_KEY, c);
-    },
-    []
-  );
-
   const addHabit = useCallback(
     (data: { name: string; icon: string; color: HabitColor; frequency: "daily" | "weekly" }) => {
       const habit: Habit = {
