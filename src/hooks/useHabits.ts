@@ -205,6 +205,47 @@ export function useHabits() {
     return day !== 1 && habits.some((h) => h.frequency === "weekly");
   }, [habits, todayKey]);
 
+  const bestStreak = useMemo(() => {
+    if (habits.length === 0) return 0;
+    return Math.max(...habits.map((h) => getStreak(h.id)), 0);
+  }, [habits, getStreak]);
+
+  const weeklyPerfectDays = useMemo(() => {
+    if (todaysHabits.length === 0) return { perfect: 0, total: 7 };
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    let perfect = 0;
+
+    for (let i = 0; i <= dayOfWeek; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - (dayOfWeek - i));
+      const key = toDateKey(d);
+      const allDone = todaysHabits.every((h) =>
+        completions.some((c) => c.habitId === h.id && c.date === key)
+      );
+      if (allDone) perfect++;
+    }
+
+    return { perfect, total: dayOfWeek + 1 };
+  }, [todaysHabits, completions, todayKey]);
+
+  const recentActivity = useMemo(() => {
+    const today = new Date();
+    return habits.map((h) => {
+      const days: { date: string; done: boolean }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        const key = toDateKey(d);
+        days.push({
+          date: key,
+          done: completions.some((c) => c.habitId === h.id && c.date === key),
+        });
+      }
+      return { habit: h, days };
+    });
+  }, [habits, completions, todayKey]);
+
   return {
     habits,
     completions,
@@ -220,5 +261,8 @@ export function useHabits() {
     todaysProgress,
     todayKey,
     hasHiddenWeekly,
+    bestStreak,
+    weeklyPerfectDays,
+    recentActivity,
   };
 }
