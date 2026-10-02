@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Fire, Trophy, CalendarCheck, Heartbeat, Moon, Footprints, WaveTriangle } from "@phosphor-icons/react";
+import { Fire, Trophy, CalendarCheck, Heartbeat, Moon, Footprints, WaveTriangle, Lightning } from "@phosphor-icons/react";
 import { useHabitsContext } from "../context/HabitsContext";
 import { useUltrahuman } from "../hooks/useUltrahuman";
 import { HabitCard } from "../components/HabitCard";
@@ -318,7 +318,7 @@ export function Home({ onEditHabit }: HomeProps) {
                     </div>
                     <div>
                       <div style={{ fontSize: "var(--text-lg)", fontWeight: 700 }}>
-                        {Math.floor(vitals.sleep.duration / 60)}h {vitals.sleep.duration % 60}m
+                        {Math.floor(vitals.sleep.totalMinutes / 60)}h {vitals.sleep.totalMinutes % 60}m
                       </div>
                       <div style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>
                         Sleep
@@ -435,6 +435,43 @@ export function Home({ onEditHabit }: HomeProps) {
                       </div>
                       <div style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>
                         Steps
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {vitals.recovery && (
+                  <div
+                    style={{
+                      padding: "var(--space-4)",
+                      background: "var(--color-surface)",
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--color-border)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "var(--space-3)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: "50%",
+                        background: "var(--color-habit-yellow-bg)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Lightning size={18} weight="bold" color="var(--color-habit-yellow-text)" />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "var(--text-lg)", fontWeight: 700 }}>
+                        {vitals.recovery.score}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>
+                        Recovery
                       </div>
                     </div>
                   </div>
