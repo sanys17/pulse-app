@@ -1,8 +1,8 @@
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Fire, Trophy, CalendarCheck, Heartbeat, Moon, Footprints, WaveTriangle, Lightning } from "@phosphor-icons/react";
+import { Bell, Heartbeat, Moon, Footprints, WaveTriangle, Lightning, Check } from "@phosphor-icons/react";
 import { useHabitsContext } from "../context/HabitsContext";
 import { useUltrahuman } from "../hooks/useUltrahuman";
-import { HabitCard } from "../components/HabitCard";
 import { HabitIcon } from "../components/HabitIcon";
 import { HABIT_COLORS } from "../types";
 import type { Habit } from "../types";
@@ -11,9 +11,52 @@ interface HomeProps {
   onEditHabit: (habit: Habit) => void;
 }
 
-const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
+function CircularProgress({ percent }: { percent: number }) {
+  const r = 42;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference - (percent / 100) * circumference;
 
-export function Home({ onEditHabit }: HomeProps) {
+  return (
+    <div style={{ position: "relative", width: 100, height: 100, flexShrink: 0 }}>
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        <circle
+          cx="50" cy="50" r={r}
+          fill="none"
+          stroke="var(--color-border)"
+          strokeWidth="6"
+        />
+        <circle
+          cx="50" cy="50" r={r}
+          fill="none"
+          stroke="var(--color-complete)"
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          transform="rotate(-90 50 50)"
+          style={{ transition: "stroke-dashoffset 600ms cubic-bezier(0.34, 1.56, 0.64, 1)" }}
+        />
+      </svg>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span style={{ fontSize: "var(--text-xl)", fontWeight: 700 }}>{percent}%</span>
+        <span style={{ fontSize: 10, color: "var(--color-text-secondary)", fontWeight: 500 }}>
+          Overall
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export function Home(_props: HomeProps) {
   const navigate = useNavigate();
   const {
     habits,
@@ -23,54 +66,95 @@ export function Home({ onEditHabit }: HomeProps) {
     toggleCompletion,
     getStreak,
     hasHiddenWeekly,
-    bestStreak,
-    weeklyPerfectDays,
-    recentActivity,
   } = useHabitsContext();
   const { vitals, loading: vitalsLoading } = useUltrahuman();
 
-  const greeting = (() => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
-  })();
-
   const today = new Date();
-  const dateStr = today.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
 
-  const allDoneToday =
-    todaysHabits.length > 0 &&
-    todaysProgress.done === todaysProgress.total;
+  const dateStrip = useMemo(() => {
+    const days: { date: Date; label: string; isToday: boolean }[] = [];
+    for (let i = -3; i <= 3; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      days.push({
+        date: d,
+        label: i === 0
+          ? `Today ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+          : String(d.getDate()),
+        isToday: i === 0,
+      });
+    }
+    return days;
+  }, [today.toDateString()]);
+
+  const progressPercent = todaysProgress.total > 0
+    ? Math.round((todaysProgress.done / todaysProgress.total) * 100)
+    : 0;
+
+  const nextHabit = todaysHabits.find((h) => !isCompleted(h.id));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
       {/* Header */}
-      <header>
-        <p
-          style={{
-            fontSize: "var(--text-sm)",
-            color: "var(--color-text-secondary)",
-            fontWeight: 500,
-          }}
-        >
-          {dateStr}
-        </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1
           style={{
             fontSize: "var(--text-2xl)",
             fontWeight: 700,
             letterSpacing: "-0.03em",
-            marginTop: "var(--space-1)",
           }}
         >
-          {greeting}
+          Hello Matyas
         </h1>
-      </header>
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: "50%",
+            background: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Bell size={20} weight="regular" color="var(--color-text-secondary)" />
+        </div>
+      </div>
+
+      {/* Date Strip */}
+      <div
+        style={{
+          display: "flex",
+          gap: "var(--space-2)",
+          overflowX: "auto",
+          paddingBottom: 4,
+          margin: "0 -16px",
+          padding: "0 16px 4px",
+          scrollbarWidth: "none",
+        }}
+      >
+        {dateStrip.map((day) => (
+          <div
+            key={day.date.toISOString()}
+            style={{
+              padding: "var(--space-2) var(--space-3)",
+              borderRadius: 20,
+              background: day.isToday ? "var(--color-text)" : "transparent",
+              color: day.isToday ? "var(--color-canvas)" : "var(--color-text-secondary)",
+              fontSize: day.isToday ? "var(--text-sm)" : "var(--text-base)",
+              fontWeight: day.isToday ? 600 : 500,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              minWidth: day.isToday ? "auto" : 40,
+              textAlign: "center",
+              transition: "all 200ms ease",
+            }}
+          >
+            {day.label}
+          </div>
+        ))}
+      </div>
 
       {/* Empty state */}
       {habits.length === 0 ? (
@@ -81,9 +165,7 @@ export function Home({ onEditHabit }: HomeProps) {
             color: "var(--color-text-secondary)",
           }}
         >
-          <p style={{ fontSize: "var(--text-lg)", fontWeight: 600 }}>
-            No habits yet
-          </p>
+          <p style={{ fontSize: "var(--text-lg)", fontWeight: 600 }}>No habits yet</p>
           <p style={{ fontSize: "var(--text-sm)", marginTop: "var(--space-2)" }}>
             Start building your daily routine
           </p>
@@ -98,7 +180,6 @@ export function Home({ onEditHabit }: HomeProps) {
               fontSize: "var(--text-sm)",
               fontWeight: 600,
               cursor: "pointer",
-              transition: "opacity 150ms ease",
             }}
           >
             Add your first habit
@@ -106,425 +187,210 @@ export function Home({ onEditHabit }: HomeProps) {
         </div>
       ) : (
         <>
-          {/* Stats Row */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: "var(--space-3)",
-            }}
-          >
-            {/* Today's Progress */}
-            <div
-              style={{
-                padding: "var(--space-4) var(--space-3)",
-                background: "var(--color-surface)",
-                borderRadius: "var(--radius-md)",
-                border: "1px solid var(--color-border)",
-                textAlign: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: "50%",
-                  background: "var(--color-complete-bg)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  margin: "0 auto var(--space-2)",
-                }}
-              >
-                <CalendarCheck size={16} weight="bold" color="var(--color-complete)" />
-              </div>
-              <div
-                style={{
-                  fontSize: "var(--text-xl)",
-                  fontWeight: 700,
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                {todaysProgress.done}
-                <span
-                  style={{
-                    fontSize: "var(--text-sm)",
-                    fontWeight: 400,
-                    color: "var(--color-text-secondary)",
-                  }}
-                >
-                  /{todaysProgress.total}
-                </span>
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "var(--color-text-secondary)",
-                  fontWeight: 500,
-                  marginTop: 2,
-                }}
-              >
-                Today
-              </div>
-            </div>
-
-            {/* Best Streak */}
-            <div
-              style={{
-                padding: "var(--space-4) var(--space-3)",
-                background: "var(--color-surface)",
-                borderRadius: "var(--radius-md)",
-                border: "1px solid var(--color-border)",
-                textAlign: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: "50%",
-                  background: "var(--color-habit-orange-bg)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  margin: "0 auto var(--space-2)",
-                }}
-              >
-                <Fire size={16} weight="bold" color="var(--color-habit-orange-text)" />
-              </div>
-              <div
-                style={{
-                  fontSize: "var(--text-xl)",
-                  fontWeight: 700,
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                {bestStreak}
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "var(--color-text-secondary)",
-                  fontWeight: 500,
-                  marginTop: 2,
-                }}
-              >
-                Best streak
-              </div>
-            </div>
-
-            {/* Weekly Score */}
-            <div
-              style={{
-                padding: "var(--space-4) var(--space-3)",
-                background: "var(--color-surface)",
-                borderRadius: "var(--radius-md)",
-                border: "1px solid var(--color-border)",
-                textAlign: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: "50%",
-                  background: "var(--color-habit-purple-bg)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  margin: "0 auto var(--space-2)",
-                }}
-              >
-                <Trophy size={16} weight="bold" color="var(--color-habit-purple-text)" />
-              </div>
-              <div
-                style={{
-                  fontSize: "var(--text-xl)",
-                  fontWeight: 700,
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                {weeklyPerfectDays.perfect}
-                <span
-                  style={{
-                    fontSize: "var(--text-sm)",
-                    fontWeight: 400,
-                    color: "var(--color-text-secondary)",
-                  }}
-                >
-                  /{weeklyPerfectDays.total}
-                </span>
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "var(--color-text-secondary)",
-                  fontWeight: 500,
-                  marginTop: 2,
-                }}
-              >
-                Perfect days
-              </div>
-            </div>
-          </div>
-
-          {/* Vitals */}
+          {/* Vitals - fills the blank space */}
           {!vitalsLoading && vitals && (
-            <section>
-              <h2
-                style={{
-                  fontSize: "var(--text-sm)",
-                  fontWeight: 600,
-                  color: "var(--color-text-secondary)",
-                  textTransform: "uppercase" as const,
-                  letterSpacing: "0.05em",
-                  marginBottom: "var(--space-3)",
-                }}
-              >
-                Vitals
-              </h2>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "var(--space-3)",
-                }}
-              >
-                {vitals.sleep && (
-                  <div
-                    style={{
-                      padding: "var(--space-4)",
-                      background: "var(--color-surface)",
-                      borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--color-border)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "var(--space-3)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: "50%",
-                        background: "var(--color-habit-purple-bg)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <Moon size={18} weight="bold" color="var(--color-habit-purple-text)" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "var(--text-lg)", fontWeight: 700 }}>
-                        {Math.floor(vitals.sleep.totalMinutes / 60)}h {vitals.sleep.totalMinutes % 60}m
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>
-                        Sleep
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {vitals.hr && (
-                  <div
-                    style={{
-                      padding: "var(--space-4)",
-                      background: "var(--color-surface)",
-                      borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--color-border)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "var(--space-3)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: "50%",
-                        background: "var(--color-habit-red-bg)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <Heartbeat size={18} weight="bold" color="var(--color-habit-red-text)" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "var(--text-lg)", fontWeight: 700 }}>
-                        {vitals.hr.avg}
-                        <span style={{ fontSize: 12, fontWeight: 400, color: "var(--color-text-secondary)" }}> bpm</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>
-                        Avg HR
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {vitals.hrv && (
-                  <div
-                    style={{
-                      padding: "var(--space-4)",
-                      background: "var(--color-surface)",
-                      borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--color-border)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "var(--space-3)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: "50%",
-                        background: "var(--color-habit-blue-bg)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <WaveTriangle size={18} weight="bold" color="var(--color-habit-blue-text)" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "var(--text-lg)", fontWeight: 700 }}>
-                        {vitals.hrv.avg}
-                        <span style={{ fontSize: 12, fontWeight: 400, color: "var(--color-text-secondary)" }}> ms</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>
-                        HRV
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {vitals.steps && (
-                  <div
-                    style={{
-                      padding: "var(--space-4)",
-                      background: "var(--color-surface)",
-                      borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--color-border)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "var(--space-3)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: "50%",
-                        background: "var(--color-habit-green-bg)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <Footprints size={18} weight="bold" color="var(--color-habit-green-text)" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "var(--text-lg)", fontWeight: 700 }}>
-                        {vitals.steps.total.toLocaleString()}
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>
-                        Steps
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {vitals.recovery && (
-                  <div
-                    style={{
-                      padding: "var(--space-4)",
-                      background: "var(--color-surface)",
-                      borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--color-border)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "var(--space-3)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: "50%",
-                        background: "var(--color-habit-yellow-bg)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <Lightning size={18} weight="bold" color="var(--color-habit-yellow-text)" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "var(--text-lg)", fontWeight: 700 }}>
-                        {vitals.recovery.score}
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>
-                        Recovery
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "var(--space-3)",
+              }}
+            >
+              {vitals.sleep && (
+                <VitalCard
+                  icon={<Moon size={18} weight="bold" color="var(--color-habit-purple-text)" />}
+                  bg="var(--color-habit-purple-bg)"
+                  value={`${Math.floor(vitals.sleep.totalMinutes / 60)}h ${vitals.sleep.totalMinutes % 60}m`}
+                  label="Sleep"
+                />
+              )}
+              {vitals.hr && (
+                <VitalCard
+                  icon={<Heartbeat size={18} weight="bold" color="var(--color-habit-red-text)" />}
+                  bg="var(--color-habit-red-bg)"
+                  value={`${vitals.hr.avg} bpm`}
+                  label="Heart Rate"
+                />
+              )}
+              {vitals.hrv && (
+                <VitalCard
+                  icon={<WaveTriangle size={18} weight="bold" color="var(--color-habit-blue-text)" />}
+                  bg="var(--color-habit-blue-bg)"
+                  value={`${vitals.hrv.avg} ms`}
+                  label="HRV"
+                />
+              )}
+              {vitals.recovery ? (
+                <VitalCard
+                  icon={<Lightning size={18} weight="bold" color="var(--color-habit-yellow-text)" />}
+                  bg="var(--color-habit-yellow-bg)"
+                  value={String(vitals.recovery.score)}
+                  label="Recovery"
+                />
+              ) : vitals.steps ? (
+                <VitalCard
+                  icon={<Footprints size={18} weight="bold" color="var(--color-habit-green-text)" />}
+                  bg="var(--color-habit-green-bg)"
+                  value={vitals.steps.total.toLocaleString()}
+                  label="Steps"
+                />
+              ) : null}
+            </div>
           )}
 
-          {/* Today's Habits */}
+          {/* Next Habit + Progress Ring */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "var(--space-4)",
+            }}
+          >
+            <div>
+              <span
+                style={{
+                  fontSize: "var(--text-sm)",
+                  color: "var(--color-text-secondary)",
+                  fontWeight: 500,
+                }}
+              >
+                {nextHabit ? "Next Habit" : "All done!"}
+              </span>
+              {nextHabit && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--space-3)",
+                    marginTop: "var(--space-2)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: "var(--radius-sm)",
+                      background: HABIT_COLORS[nextHabit.color].bg,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <HabitIcon
+                      name={nextHabit.icon}
+                      size={22}
+                      color={HABIT_COLORS[nextHabit.color].fill}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "var(--text-lg)", fontWeight: 600 }}>
+                      {nextHabit.name}
+                    </div>
+                    <div style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)" }}>
+                      {getStreak(nextHabit.id) > 0
+                        ? `${getStreak(nextHabit.id)} day streak`
+                        : nextHabit.frequency}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <CircularProgress percent={progressPercent} />
+          </div>
+
+          {/* Today's Habits - 2x2 grid */}
           <section>
-            <div
+            <h2
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "baseline",
+                fontSize: "var(--text-lg)",
+                fontWeight: 700,
                 marginBottom: "var(--space-3)",
               }}
             >
-              <h2
-                style={{
-                  fontSize: "var(--text-sm)",
-                  fontWeight: 600,
-                  color: "var(--color-text-secondary)",
-                  textTransform: "uppercase" as const,
-                  letterSpacing: "0.05em",
-                }}
-              >
-                Today
-              </h2>
-              {allDoneToday && (
-                <span
-                  style={{
-                    fontSize: "var(--text-sm)",
-                    fontWeight: 600,
-                    color: "var(--color-complete)",
-                  }}
-                >
-                  All done
-                </span>
-              )}
-            </div>
+              Today's Habits
+            </h2>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "var(--space-3)",
+              }}
+            >
+              {todaysHabits.map((habit) => {
+                const color = HABIT_COLORS[habit.color];
+                const completed = isCompleted(habit.id);
+                const streak = getStreak(habit.id);
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-              {todaysHabits.map((habit) => (
-                <HabitCard
-                  key={habit.id}
-                  habit={habit}
-                  completed={isCompleted(habit.id)}
-                  streak={getStreak(habit.id)}
-                  onToggle={() => toggleCompletion(habit.id)}
-                  onEdit={() => onEditHabit(habit)}
-                />
-              ))}
+                return (
+                  <div
+                    key={habit.id}
+                    onClick={() => toggleCompletion(habit.id)}
+                    style={{
+                      padding: "var(--space-4)",
+                      background: color.bg,
+                      borderRadius: "var(--radius-md)",
+                      cursor: "pointer",
+                      position: "relative",
+                      minHeight: 100,
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      opacity: completed ? 0.7 : 1,
+                      transition: "all 200ms ease",
+                    }}
+                  >
+                    {/* Check indicator */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 12,
+                        right: 12,
+                        width: 24,
+                        height: 24,
+                        borderRadius: 6,
+                        border: completed
+                          ? `2px solid ${color.fill}`
+                          : `2px solid ${color.text}40`,
+                        background: completed ? color.fill : "transparent",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        transition: "all 250ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+                      }}
+                    >
+                      {completed && <Check size={14} weight="bold" color="white" />}
+                    </div>
+
+                    {/* Icon */}
+                    <div style={{ marginBottom: "var(--space-3)" }}>
+                      <HabitIcon name={habit.icon} size={28} color={color.fill} />
+                    </div>
+
+                    {/* Label */}
+                    <div>
+                      <div
+                        style={{
+                          fontSize: "var(--text-base)",
+                          fontWeight: 600,
+                          color: color.text,
+                        }}
+                      >
+                        {habit.name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "var(--text-sm)",
+                          color: `${color.text}99`,
+                          marginTop: 2,
+                        }}
+                      >
+                        {streak > 0 ? `${streak} day streak` : habit.frequency}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {hasHiddenWeekly && (
@@ -540,119 +406,55 @@ export function Home({ onEditHabit }: HomeProps) {
               </p>
             )}
           </section>
-
-          {/* Recent Activity */}
-          {recentActivity.length > 0 && (
-            <section>
-              <h2
-                style={{
-                  fontSize: "var(--text-sm)",
-                  fontWeight: 600,
-                  color: "var(--color-text-secondary)",
-                  textTransform: "uppercase" as const,
-                  letterSpacing: "0.05em",
-                  marginBottom: "var(--space-3)",
-                }}
-              >
-                Last 7 days
-              </h2>
-
-              <div
-                style={{
-                  padding: "var(--space-4)",
-                  background: "var(--color-surface)",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--color-border)",
-                }}
-              >
-                {/* Day labels */}
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr repeat(7, 28px)",
-                    gap: 4,
-                    alignItems: "center",
-                    marginBottom: "var(--space-2)",
-                  }}
-                >
-                  <div />
-                  {recentActivity[0].days.map((day) => {
-                    const d = new Date(day.date + "T12:00:00");
-                    return (
-                      <span
-                        key={day.date}
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 500,
-                          color: "var(--color-text-secondary)",
-                          textAlign: "center",
-                        }}
-                      >
-                        {DAY_NAMES[d.getDay()]}
-                      </span>
-                    );
-                  })}
-                </div>
-
-                {/* Habit rows */}
-                {recentActivity.map(({ habit, days }) => {
-                  const color = HABIT_COLORS[habit.color];
-                  return (
-                    <div
-                      key={habit.id}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr repeat(7, 28px)",
-                        gap: 4,
-                        alignItems: "center",
-                        padding: "6px 0",
-                        borderTop: "1px solid var(--color-border)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          minWidth: 0,
-                          overflow: "hidden",
-                        }}
-                      >
-                        <HabitIcon name={habit.icon} size={14} color={color.fill} />
-                        <span
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 500,
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                          }}
-                        >
-                          {habit.name}
-                        </span>
-                      </div>
-                      {days.map((day) => (
-                        <div
-                          key={day.date}
-                          style={{
-                            width: 20,
-                            height: 20,
-                            borderRadius: 4,
-                            background: day.done ? color.fill : "var(--color-surface-dim)",
-                            opacity: day.done ? 0.85 : 1,
-                            margin: "0 auto",
-                            transition: "background 200ms ease",
-                          }}
-                        />
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
         </>
       )}
+    </div>
+  );
+}
+
+function VitalCard({
+  icon,
+  bg,
+  value,
+  label,
+}: {
+  icon: React.ReactNode;
+  bg: string;
+  value: string;
+  label: string;
+}) {
+  return (
+    <div
+      style={{
+        padding: "var(--space-4)",
+        background: "var(--color-surface)",
+        borderRadius: "var(--radius-md)",
+        border: "1px solid var(--color-border)",
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--space-3)",
+      }}
+    >
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: "50%",
+          background: bg,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </div>
+      <div>
+        <div style={{ fontSize: "var(--text-base)", fontWeight: 700 }}>{value}</div>
+        <div style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>
+          {label}
+        </div>
+      </div>
     </div>
   );
 }
