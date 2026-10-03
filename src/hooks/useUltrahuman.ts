@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 export interface VitalsData {
   hr: { avg: number; min: number; max: number } | null;
@@ -19,6 +19,23 @@ export interface VitalsData {
 interface UltrahumanMetric {
   type: string;
   object: Record<string, unknown>;
+}
+
+const CACHE_KEY = "pulse-vitals-cache";
+
+function loadCache(): { date: string; vitals: VitalsData } | null {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCache(date: string, vitals: VitalsData) {
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ date, vitals }));
+  } catch {}
 }
 
 function parseMetrics(metrics: UltrahumanMetric[]): VitalsData {
@@ -111,13 +128,22 @@ function toDateKey(d: Date = new Date()): string {
 }
 
 export function useUltrahuman() {
-  const [vitals, setVitals] = useState<VitalsData | null>(null);
+  const [vitals, setVitals] = useState<VitalsData | null>(() => {
+    const cached = loadCache();
+    const today = toDateKey();
+    return cached?.date === today ? cached.vitals : null;
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastFetchedDate = useRef<string | null>(null);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchVitals = useCallback(async (date?: string) => {
+  const fetchVitals = useCallback(async (date?: string, isRetry = false) => {
     const dateStr = date ?? toDateKey();
-    setLoading(true);
+
+    if (!isRetry) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -131,14 +157,24 @@ export function useUltrahuman() {
       const dateMetrics = json?.data?.metrics?.[dateStr];
 
       if (!dateMetrics || !Array.isArray(dateMetrics)) {
-        setVitals(null);
-        setError("No data for this date");
+        if (!isRetry) {
+          setError("No data for this date");
+        }
       } else {
-        setVitals(parseMetrics(dateMetrics));
+        const parsed = parseMetrics(dateMetrics);
+        setVitals(parsed);
+        saveCache(dateStr, parsed);
+        lastFetchedDate.current = dateStr;
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to fetch vitals");
-      setVitals(null);
+      const msg = e instanceof Error ? e.message : "Failed to fetch vitals";
+      setError(msg);
+
+      if (!isRetry) {
+        retryTimer.current = setTimeout(() => {
+          fetchVitals(dateStr, true);
+        }, 5000);
+      }
     } finally {
       setLoading(false);
     }
@@ -146,6 +182,25 @@ export function useUltrahuman() {
 
   useEffect(() => {
     fetchVitals();
+
+    const handleVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+
+      const today = toDateKey();
+      if (lastFetchedDate.current !== today) {
+        fetchVitals(today);
+        return;
+      }
+
+      fetchVitals(today);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    };
   }, [fetchVitals]);
 
   return { vitals, loading, error, refetch: fetchVitals };
