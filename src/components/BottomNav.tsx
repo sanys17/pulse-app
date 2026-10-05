@@ -179,10 +179,8 @@ export function BottomNav({ onAddHabit, onQuickLog }: BottomNavProps) {
 
         {/* Center FAB */}
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpen((v) => !v);
-          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setOpen((v) => !v)}
           aria-label={open ? "Close menu" : "Quick actions"}
           style={{
             width: 52,
