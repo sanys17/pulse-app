@@ -7,6 +7,7 @@ import { QuickLog } from "./components/QuickLog";
 import { useTheme } from "./hooks/useTheme";
 import { Home } from "./pages/Home";
 import { Habits } from "./pages/Habits";
+import { Social } from "./pages/Social";
 import { Calendar } from "./pages/Calendar";
 import { Tasks } from "./pages/Tasks";
 import { Settings } from "./pages/Settings";
@@ -68,6 +69,7 @@ function AppContent() {
           <Route path="/" element={<Home onEditHabit={handleEditFromHome} />} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/habits" element={<Habits />} />
+          <Route path="/social" element={<Social />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route
             path="/settings"

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { House, CalendarBlank, Target, GearSix, Plus, ListChecks, CheckCircle } from "@phosphor-icons/react";
+import { House, CalendarBlank, UsersThree, GearSix, Plus, Target, ListChecks, CheckCircle } from "@phosphor-icons/react";
 
 const leftTabs = [
   { to: "/", label: "Home", Icon: House },
@@ -8,7 +8,7 @@ const leftTabs = [
 ] as const;
 
 const rightTabs = [
-  { to: "/habits", label: "Habits", Icon: Target },
+  { to: "/social", label: "Social", Icon: UsersThree },
   { to: "/settings", label: "Settings", Icon: GearSix },
 ] as const;
 
