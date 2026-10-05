@@ -6,6 +6,7 @@ import { HabitForm } from "./components/HabitForm";
 import { useTheme } from "./hooks/useTheme";
 import { Home } from "./pages/Home";
 import { Habits } from "./pages/Habits";
+import { Calendar } from "./pages/Calendar";
 import { Tasks } from "./pages/Tasks";
 import { Settings } from "./pages/Settings";
 import type { Habit, HabitColor } from "./types";
@@ -52,6 +53,7 @@ function AppContent() {
       >
         <Routes>
           <Route path="/" element={<Home onEditHabit={handleEditFromHome} />} />
+          <Route path="/calendar" element={<Calendar />} />
           <Route path="/habits" element={<Habits />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route

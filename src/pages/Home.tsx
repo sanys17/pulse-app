@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, Heartbeat, Moon, Footprints, WaveTriangle, Lightning, Check } from "@phosphor-icons/react";
 import { useHabitsContext } from "../context/HabitsContext";
@@ -9,6 +9,10 @@ import type { Habit } from "../types";
 
 interface HomeProps {
   onEditHabit: (habit: Habit) => void;
+}
+
+function toDateKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
 function CircularProgress({ percent }: { percent: number }) {
@@ -60,38 +64,66 @@ export function Home(_props: HomeProps) {
   const navigate = useNavigate();
   const {
     habits,
-    todaysHabits,
-    todaysProgress,
+    completions,
     isCompleted,
     toggleCompletion,
     getStreak,
-    hasHiddenWeekly,
   } = useHabitsContext();
-  const { vitals, loading: vitalsLoading } = useUltrahuman();
+  const { vitals, loading: vitalsLoading, refetch: refetchVitals } = useUltrahuman();
 
   const today = new Date();
+  const todayKey = toDateKey(today);
+  const [selectedDate, setSelectedDate] = useState(todayKey);
+
+  useEffect(() => {
+    refetchVitals(selectedDate);
+  }, [selectedDate, refetchVitals]);
 
   const dateStrip = useMemo(() => {
-    const days: { date: Date; label: string; isToday: boolean }[] = [];
-    for (let i = -3; i <= 3; i++) {
+    const days: { dateKey: string; label: string; todayLabel: string; isToday: boolean }[] = [];
+    for (let i = -7; i <= 7; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
+      const key = toDateKey(d);
       days.push({
-        date: d,
-        label: i === 0
-          ? `Today ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-          : String(d.getDate()),
-        isToday: i === 0,
+        dateKey: key,
+        label: String(d.getDate()),
+        todayLabel: `Today ${d.toLocaleDateString("en-US", { month: "short" })} ${d.getDate()}`,
+        isToday: key === todayKey,
       });
     }
     return days;
-  }, [today.toDateString()]);
+  }, [todayKey]);
 
-  const progressPercent = todaysProgress.total > 0
-    ? Math.round((todaysProgress.done / todaysProgress.total) * 100)
+  const selectedDateObj = useMemo(() => new Date(selectedDate + "T12:00:00"), [selectedDate]);
+  const isToday = selectedDate === todayKey;
+
+  const dayHabits = useMemo(() => {
+    const dayOfWeek = selectedDateObj.getDay();
+    return habits.filter((h) => {
+      if (h.frequency === "daily") return true;
+      return dayOfWeek === 1;
+    });
+  }, [habits, selectedDateObj]);
+
+  const hasHiddenWeekly = useMemo(() => {
+    const dayOfWeek = selectedDateObj.getDay();
+    return dayOfWeek !== 1 && habits.some((h) => h.frequency === "weekly");
+  }, [habits, selectedDateObj]);
+
+  const dayProgress = useMemo(() => {
+    if (dayHabits.length === 0) return { done: 0, total: 0 };
+    const done = dayHabits.filter((h) =>
+      completions.some((c) => c.habitId === h.id && c.date === selectedDate)
+    ).length;
+    return { done, total: dayHabits.length };
+  }, [dayHabits, completions, selectedDate]);
+
+  const progressPercent = dayProgress.total > 0
+    ? Math.round((dayProgress.done / dayProgress.total) * 100)
     : 0;
 
-  const nextHabit = todaysHabits.find((h) => !isCompleted(h.id));
+  const nextHabit = dayHabits.find((h) => !isCompleted(h.id, selectedDate));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
@@ -122,39 +154,26 @@ export function Home(_props: HomeProps) {
         </div>
       </div>
 
-      {/* Date Strip */}
-      <div
-        style={{
-          display: "flex",
-          gap: "var(--space-2)",
-          overflowX: "auto",
-          paddingBottom: 4,
-          margin: "0 -16px",
-          padding: "0 16px 4px",
-          scrollbarWidth: "none",
-        }}
-      >
-        {dateStrip.map((day) => (
-          <div
-            key={day.date.toISOString()}
-            style={{
-              padding: "var(--space-2) var(--space-3)",
-              borderRadius: 20,
-              background: day.isToday ? "var(--color-text)" : "transparent",
-              color: day.isToday ? "var(--color-canvas)" : "var(--color-text-secondary)",
-              fontSize: day.isToday ? "var(--text-sm)" : "var(--text-base)",
-              fontWeight: day.isToday ? 600 : 500,
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-              minWidth: day.isToday ? "auto" : 40,
-              textAlign: "center",
-              transition: "all 200ms ease",
-            }}
-          >
-            {day.label}
-          </div>
-        ))}
-      </div>
+      {/* Date Strip — draggable, today centered on mount */}
+      <DateStrip
+        days={dateStrip}
+        selectedDate={selectedDate}
+        onSelect={setSelectedDate}
+      />
+
+      {/* Selected date label when not today */}
+      {!isToday && (
+        <p
+          style={{
+            fontSize: "var(--text-sm)",
+            color: "var(--color-text-secondary)",
+            textAlign: "center",
+            margin: "calc(-1 * var(--space-3)) 0",
+          }}
+        >
+          {selectedDateObj.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+        </p>
+      )}
 
       {/* Empty state */}
       {habits.length === 0 ? (
@@ -299,7 +318,7 @@ export function Home(_props: HomeProps) {
             <CircularProgress percent={progressPercent} />
           </div>
 
-          {/* Today's Habits - 2x2 grid */}
+          {/* Habits grid */}
           <section>
             <h2
               style={{
@@ -308,7 +327,7 @@ export function Home(_props: HomeProps) {
                 marginBottom: "var(--space-3)",
               }}
             >
-              Today's Habits
+              {isToday ? "Today's Habits" : "Habits"}
             </h2>
             <div
               style={{
@@ -317,15 +336,15 @@ export function Home(_props: HomeProps) {
                 gap: "var(--space-3)",
               }}
             >
-              {todaysHabits.map((habit) => {
+              {dayHabits.map((habit) => {
                 const color = HABIT_COLORS[habit.color];
-                const completed = isCompleted(habit.id);
+                const completed = isCompleted(habit.id, selectedDate);
                 const streak = getStreak(habit.id);
 
                 return (
                   <div
                     key={habit.id}
-                    onClick={() => toggleCompletion(habit.id)}
+                    onClick={() => toggleCompletion(habit.id, selectedDate)}
                     style={{
                       padding: "var(--space-4)",
                       background: color.bg,
@@ -408,6 +427,108 @@ export function Home(_props: HomeProps) {
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+function DateStrip({
+  days,
+  selectedDate,
+  onSelect,
+}: {
+  days: { dateKey: string; label: string; todayLabel: string; isToday: boolean }[];
+  selectedDate: string;
+  onSelect: (key: string) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const todayRef = useRef<HTMLButtonElement>(null);
+  const dragState = useRef({ isDown: false, startX: 0, scrollLeft: 0, moved: false });
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    const el = todayRef.current;
+    if (!container || !el) return;
+    const offset = el.offsetLeft - container.offsetWidth / 2 + el.offsetWidth / 2;
+    container.scrollLeft = offset;
+  }, []);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    dragState.current = { isDown: true, startX: e.clientX, scrollLeft: el.scrollLeft, moved: false };
+    el.setPointerCapture(e.pointerId);
+    el.style.cursor = "grabbing";
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragState.current.isDown) return;
+    const dx = e.clientX - dragState.current.startX;
+    if (Math.abs(dx) > 3) dragState.current.moved = true;
+    scrollRef.current!.scrollLeft = dragState.current.scrollLeft - dx;
+  }, []);
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    dragState.current.isDown = false;
+    const el = scrollRef.current;
+    if (el) {
+      el.releasePointerCapture(e.pointerId);
+      el.style.cursor = "grab";
+    }
+  }, []);
+
+  const handleClick = useCallback((key: string) => {
+    if (!dragState.current.moved) onSelect(key);
+  }, [onSelect]);
+
+  return (
+    <div
+      ref={scrollRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--space-2)",
+        overflowX: "auto",
+        margin: "0 -16px",
+        padding: "0 16px 4px",
+        scrollbarWidth: "none",
+        cursor: "grab",
+        userSelect: "none",
+        touchAction: "pan-x",
+        WebkitOverflowScrolling: "touch",
+      }}
+    >
+      {days.map((day) => {
+        const isSelected = day.dateKey === selectedDate;
+        return (
+          <button
+            key={day.dateKey}
+            ref={day.isToday ? todayRef : undefined}
+            onClick={() => handleClick(day.dateKey)}
+            style={{
+              padding: day.isToday ? "8px 16px" : "8px 4px",
+              borderRadius: 24,
+              border: "none",
+              background: isSelected ? "var(--color-complete)" : "transparent",
+              color: isSelected ? "#fff" : "var(--color-text-secondary)",
+              fontSize: "var(--text-base)",
+              fontWeight: isSelected ? 600 : 400,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              minWidth: day.isToday ? "auto" : 36,
+              textAlign: "center",
+              cursor: "pointer",
+              transition: "background 200ms ease, color 200ms ease",
+              fontFamily: "inherit",
+            }}
+          >
+            {day.isToday ? day.todayLabel : day.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
