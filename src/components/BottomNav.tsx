@@ -99,11 +99,11 @@ export function BottomNav({ onAddHabit, onQuickLog }: BottomNavProps) {
                 alignItems: "center",
                 gap: 12,
                 padding: "10px 20px 10px 14px",
-                background: "#1c1c1e",
+                background: "#12121C",
                 borderRadius: 20,
                 border: "none",
                 cursor: "pointer",
-                color: "#fff",
+                color: "#EAECF4",
                 fontSize: 14,
                 fontWeight: 600,
                 fontFamily: "inherit",
@@ -122,7 +122,7 @@ export function BottomNav({ onAddHabit, onQuickLog }: BottomNavProps) {
                   justifyContent: "center",
                 }}
               >
-                <item.Icon size={20} weight="regular" color="#fff" />
+                <item.Icon size={20} weight="regular" color="#EAECF4" />
               </div>
               {item.label}
             </button>
@@ -141,7 +141,7 @@ export function BottomNav({ onAddHabit, onQuickLog }: BottomNavProps) {
           transform: "translateX(-50%)",
           width: "calc(100% - 32px)",
           maxWidth: 398,
-          background: "#1c1c1e",
+          background: "#12121C",
           borderRadius: 28,
           display: "flex",
           alignItems: "center",
@@ -166,7 +166,7 @@ export function BottomNav({ onAddHabit, onQuickLog }: BottomNavProps) {
               width: 48,
               height: 48,
               textDecoration: "none",
-              color: isActive ? "#fff" : "rgba(255,255,255,0.45)",
+              color: isActive ? "#EAECF4" : "rgba(234,236,244,0.4)",
               transition: "color 200ms ease",
               borderRadius: 16,
             })}
@@ -187,18 +187,18 @@ export function BottomNav({ onAddHabit, onQuickLog }: BottomNavProps) {
             height: 52,
             borderRadius: "50%",
             border: "none",
-            background: "#BE6E46",
+            background: "#8E9BC4",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             cursor: "pointer",
             marginTop: -20,
-            boxShadow: "0 4px 12px rgba(190,110,70,0.4)",
+            boxShadow: "0 4px 12px rgba(142,155,196,0.35)",
             transition: "transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1)",
             transform: open ? "rotate(45deg)" : "rotate(0deg)",
           }}
         >
-          <Plus size={26} weight="bold" color="#1c1c1e" />
+          <Plus size={26} weight="bold" color="#07070C" />
         </button>
 
         {rightTabs.map(({ to, label, Icon }) => (
@@ -214,7 +214,7 @@ export function BottomNav({ onAddHabit, onQuickLog }: BottomNavProps) {
               width: 48,
               height: 48,
               textDecoration: "none",
-              color: isActive ? "#fff" : "rgba(255,255,255,0.45)",
+              color: isActive ? "#EAECF4" : "rgba(234,236,244,0.4)",
               transition: "color 200ms ease",
               borderRadius: 16,
             })}
