@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Heartbeat, Moon, Footprints, WaveTriangle, Lightning, Check } from "@phosphor-icons/react";
+import { Heartbeat, Moon, Footprints, WaveTriangle, Lightning, Check } from "@phosphor-icons/react";
 import { useHabitsContext } from "../context/HabitsContext";
 import { useUltrahuman } from "../hooks/useUltrahuman";
 import { HabitIcon } from "../components/HabitIcon";
@@ -15,61 +15,151 @@ function toDateKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function CircularProgress({ percent }: { percent: number }) {
-  const r = 42;
-  const circumference = 2 * Math.PI * r;
-  const offset = circumference - (percent / 100) * circumference;
+function getArcFillPath(percent: number): string {
+  if (percent <= 0) return "";
+  const p = Math.min(percent, 99.7);
+  const cx = 117.314;
+  const cy = 117.313;
+  const R = 117.313;
+  const r = 113.313;
+  const startAngle = Math.PI;
+  const sweepAngle = (p / 100) * Math.PI;
+  const endAngle = startAngle - sweepAngle;
+  const ox1 = cx + R * Math.cos(startAngle);
+  const oy1 = cy - R * Math.sin(startAngle);
+  const ox2 = cx + R * Math.cos(endAngle);
+  const oy2 = cy - R * Math.sin(endAngle);
+  const ix1 = cx + r * Math.cos(endAngle);
+  const iy1 = cy - r * Math.sin(endAngle);
+  const ix2 = cx + r * Math.cos(startAngle);
+  const iy2 = cy - r * Math.sin(startAngle);
+  const largeArc = sweepAngle > Math.PI ? 1 : 0;
+  return [
+    `M ${ox1.toFixed(3)} ${oy1.toFixed(3)}`,
+    `A ${R} ${R} 0 ${largeArc} 1 ${ox2.toFixed(3)} ${oy2.toFixed(3)}`,
+    `L ${ix1.toFixed(3)} ${iy1.toFixed(3)}`,
+    `A ${r} ${r} 0 ${largeArc} 0 ${ix2.toFixed(3)} ${iy2.toFixed(3)}`,
+    "Z",
+  ].join(" ");
+}
 
+function PulseScoreArc({ score }: { score: number }) {
   return (
-    <div style={{ position: "relative", width: 100, height: 100, flexShrink: 0 }}>
-      <svg width="100" height="100" viewBox="0 0 100 100">
-        <circle
-          cx="50" cy="50" r={r}
-          fill="none"
-          stroke="var(--color-border)"
-          strokeWidth="6"
-        />
-        <circle
-          cx="50" cy="50" r={r}
-          fill="none"
-          stroke="var(--color-complete)"
-          strokeWidth="6"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          transform="rotate(-90 50 50)"
-          style={{ transition: "stroke-dashoffset 600ms cubic-bezier(0.34, 1.56, 0.64, 1)" }}
-        />
-      </svg>
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <span style={{ fontSize: "var(--text-xl)", fontWeight: 700 }}>{percent}%</span>
-        <span style={{ fontSize: 10, color: "var(--color-text-secondary)", fontWeight: 500 }}>
-          Overall
-        </span>
+    <div style={{
+      position: "relative",
+      width: "100%",
+      height: 200,
+      display: "flex",
+      alignItems: "flex-start",
+      justifyContent: "center",
+      overflow: "visible",
+    }}>
+      {/* Glow ellipse — exact Figma asset, 302px container with -32.95% inset overflow */}
+      <div style={{
+        position: "absolute",
+        width: 302,
+        height: 302,
+        top: -150,
+        left: "50%",
+        transform: "translateX(-50%)",
+        pointerEvents: "none",
+      }}>
+        <div style={{ position: "absolute", inset: "-32.95%" }}>
+          <img
+            alt=""
+            src="/assets/glow-ellipse.svg"
+            style={{ display: "block", width: "100%", height: "100%", maxWidth: "none" }}
+          />
+        </div>
       </div>
+
+      {/* Arc track — exact Figma Subtract SVG, 234.628×118 */}
+      <div style={{
+        position: "absolute",
+        top: 10,
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: 234.628,
+        height: 118,
+      }}>
+        <img
+          alt=""
+          src="/assets/arc-track.svg"
+          style={{ position: "absolute", inset: 0, display: "block", width: "100%", height: "100%", maxWidth: "none" }}
+        />
+      </div>
+
+      {/* Arc fill — dynamic SVG with exact Figma gradient */}
+      {score > 0 && (
+        <div style={{
+          position: "absolute",
+          top: 10,
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: 234.628,
+          height: 118,
+        }}>
+          <svg
+            width="233.641"
+            height="118"
+            viewBox="0 0 234.628 118"
+            fill="none"
+            style={{ display: "block", width: "100%", height: "100%" }}
+          >
+            <defs>
+              <linearGradient id="arcFillGrad" x1="234" y1="100" x2="0" y2="118" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#846EE9" />
+                <stop offset="1" stopColor="#0B0B1F" />
+              </linearGradient>
+            </defs>
+            <path d={getArcFillPath(score)} fill="url(#arcFillGrad)" />
+          </svg>
+        </div>
+      )}
+
+      {/* Score text — Geist Bold 64px, positioned to match Figma */}
+      <p style={{
+        position: "absolute",
+        top: 54,
+        left: "50%",
+        transform: "translateX(-50%)",
+        fontFamily: "Geist, Inter, system-ui, sans-serif",
+        fontWeight: 700,
+        fontSize: 64,
+        lineHeight: "normal",
+        color: "#EAECF4",
+        whiteSpace: "nowrap",
+        margin: 0,
+      }}>
+        {score}
+      </p>
+
+      {/* "Pulse Score" label — Geist Medium 16px */}
+      <p style={{
+        position: "absolute",
+        top: 128,
+        left: "50%",
+        transform: "translateX(-50%)",
+        fontFamily: "Geist, Inter, system-ui, sans-serif",
+        fontWeight: 500,
+        fontSize: 16,
+        lineHeight: "normal",
+        color: "#EAECF4",
+        whiteSpace: "nowrap",
+        margin: 0,
+      }}>
+        Pulse Score
+      </p>
     </div>
   );
 }
 
 export function Home(_props: HomeProps) {
   const navigate = useNavigate();
-  const {
-    habits,
-    completions,
-    isCompleted,
-    toggleCompletion,
-    getStreak,
-  } = useHabitsContext();
-  const { vitals, loading: vitalsLoading, refetch: refetchVitals } = useUltrahuman();
+  const { habits, completions, isCompleted, toggleCompletion, getStreak } =
+    useHabitsContext();
+  const { vitals, loading: vitalsLoading, refetch: refetchVitals } =
+    useUltrahuman();
 
   const today = new Date();
   const todayKey = toDateKey(today);
@@ -80,7 +170,12 @@ export function Home(_props: HomeProps) {
   }, [selectedDate, refetchVitals]);
 
   const dateStrip = useMemo(() => {
-    const days: { dateKey: string; label: string; todayLabel: string; isToday: boolean }[] = [];
+    const days: {
+      dateKey: string;
+      label: string;
+      todayLabel: string;
+      isToday: boolean;
+    }[] = [];
     for (let i = -7; i <= 7; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
@@ -95,7 +190,10 @@ export function Home(_props: HomeProps) {
     return days;
   }, [todayKey]);
 
-  const selectedDateObj = useMemo(() => new Date(selectedDate + "T12:00:00"), [selectedDate]);
+  const selectedDateObj = useMemo(
+    () => new Date(selectedDate + "T12:00:00"),
+    [selectedDate],
+  );
   const isToday = selectedDate === todayKey;
 
   const dayHabits = useMemo(() => {
@@ -114,91 +212,87 @@ export function Home(_props: HomeProps) {
   const dayProgress = useMemo(() => {
     if (dayHabits.length === 0) return { done: 0, total: 0 };
     const done = dayHabits.filter((h) =>
-      completions.some((c) => c.habitId === h.id && c.date === selectedDate)
+      completions.some((c) => c.habitId === h.id && c.date === selectedDate),
     ).length;
     return { done, total: dayHabits.length };
   }, [dayHabits, completions, selectedDate]);
 
-  const progressPercent = dayProgress.total > 0
-    ? Math.round((dayProgress.done / dayProgress.total) * 100)
-    : 0;
+  const progressPercent =
+    dayProgress.total > 0
+      ? Math.round((dayProgress.done / dayProgress.total) * 100)
+      : 0;
+
+  const allCompletedDates = useMemo(() => {
+    const dateSet = new Set<string>();
+    const dateHabitCount = new Map<string, number>();
+    const dateDoneCount = new Map<string, number>();
+    for (const h of habits) {
+      for (let i = -7; i <= 7; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        const key = toDateKey(d);
+        const dow = d.getDay();
+        if (h.frequency === "daily" || dow === 1) {
+          dateHabitCount.set(key, (dateHabitCount.get(key) || 0) + 1);
+        }
+      }
+    }
+    for (const c of completions) {
+      dateDoneCount.set(c.date, (dateDoneCount.get(c.date) || 0) + 1);
+    }
+    for (const [key, total] of dateHabitCount) {
+      const done = dateDoneCount.get(key) || 0;
+      if (done >= total && total > 0) dateSet.add(key);
+    }
+    return dateSet;
+  }, [habits, completions, todayKey]);
 
   const nextHabit = dayHabits.find((h) => !isCompleted(h.id, selectedDate));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1
-          style={{
-            fontSize: "var(--text-2xl)",
-            fontWeight: 700,
-            letterSpacing: "-0.03em",
-          }}
-        >
-          Hello Matyas
-        </h1>
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: "50%",
-            background: "var(--color-surface)",
-            border: "1px solid var(--color-border)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Bell size={20} weight="regular" color="var(--color-text-secondary)" />
-        </div>
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20, overflow: "visible" }}>
+      <PulseScoreArc score={progressPercent} />
 
-      {/* Date Strip — draggable, today centered on mount */}
       <DateStrip
         days={dateStrip}
         selectedDate={selectedDate}
         onSelect={setSelectedDate}
+        completedDates={allCompletedDates}
       />
 
-      {/* Selected date label when not today */}
       {!isToday && (
-        <p
-          style={{
-            fontSize: "var(--text-sm)",
-            color: "var(--color-text-secondary)",
-            textAlign: "center",
-            margin: "calc(-1 * var(--space-3)) 0",
-          }}
-        >
-          {selectedDateObj.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+        <p style={{
+          fontSize: 13,
+          color: "var(--color-text-secondary)",
+          textAlign: "center",
+          margin: "-8px 0",
+        }}>
+          {selectedDateObj.toLocaleDateString("en-US", {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+          })}
         </p>
       )}
 
-      {/* Empty state */}
       {habits.length === 0 ? (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "var(--space-10) var(--space-4)",
-            color: "var(--color-text-secondary)",
-          }}
-        >
-          <p style={{ fontSize: "var(--text-lg)", fontWeight: 600 }}>No habits yet</p>
-          <p style={{ fontSize: "var(--text-sm)", marginTop: "var(--space-2)" }}>
-            Start building your daily routine
-          </p>
+        <div style={{
+          textAlign: "center",
+          padding: "40px 16px",
+          color: "var(--color-text-secondary)",
+        }}>
+          <p style={{ fontSize: 17, fontWeight: 600 }}>No habits yet</p>
+          <p style={{ fontSize: 13, marginTop: 8 }}>Start building your daily routine</p>
           <button
             onClick={() => navigate("/habits")}
             style={{
-              marginTop: "var(--space-4)",
-              padding: "var(--space-3) var(--space-6)",
+              marginTop: 16,
+              padding: "12px 24px",
               background: "var(--color-text)",
               color: "var(--color-canvas)",
-              borderRadius: "var(--radius-md)",
-              fontSize: "var(--text-sm)",
+              borderRadius: 12,
+              fontSize: 13,
               fontWeight: 600,
-              cursor: "pointer",
             }}
           >
             Add your first habit
@@ -206,15 +300,8 @@ export function Home(_props: HomeProps) {
         </div>
       ) : (
         <>
-          {/* Vitals - fills the blank space */}
           {!vitalsLoading && vitals && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "var(--space-3)",
-              }}
-            >
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {vitals.sleep && (
                 <VitalCard
                   icon={<Moon size={18} weight="bold" color="var(--color-habit-purple-text)" />}
@@ -257,98 +344,54 @@ export function Home(_props: HomeProps) {
             </div>
           )}
 
-          {/* Next Habit + Progress Ring */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "var(--space-4)",
-            }}
-          >
-            <div>
-              <span
-                style={{
-                  fontSize: "var(--text-sm)",
-                  color: "var(--color-text-secondary)",
-                  fontWeight: 500,
-                }}
-              >
-                {nextHabit ? "Next Habit" : "All done!"}
-              </span>
-              {nextHabit && (
-                <div
-                  style={{
+          {nextHabit && (
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div>
+                <span style={{ fontSize: 13, color: "var(--color-text-secondary)", fontWeight: 500 }}>
+                  Next Habit
+                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+                  <div style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 8,
+                    background: HABIT_COLORS[nextHabit.color].bg,
                     display: "flex",
                     alignItems: "center",
-                    gap: "var(--space-3)",
-                    marginTop: "var(--space-2)",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: "var(--radius-sm)",
-                      background: HABIT_COLORS[nextHabit.color].bg,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <HabitIcon
-                      name={nextHabit.icon}
-                      size={22}
-                      color={HABIT_COLORS[nextHabit.color].fill}
-                    />
+                    justifyContent: "center",
+                  }}>
+                    <HabitIcon name={nextHabit.icon} size={22} color={HABIT_COLORS[nextHabit.color].fill} />
                   </div>
                   <div>
-                    <div style={{ fontSize: "var(--text-lg)", fontWeight: 600 }}>
-                      {nextHabit.name}
-                    </div>
-                    <div style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)" }}>
+                    <div style={{ fontSize: 17, fontWeight: 600 }}>{nextHabit.name}</div>
+                    <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
                       {getStreak(nextHabit.id) > 0
                         ? `${getStreak(nextHabit.id)} day streak`
                         : nextHabit.frequency}
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
-            <CircularProgress percent={progressPercent} />
-          </div>
+          )}
 
-          {/* Habits grid */}
           <section>
-            <h2
-              style={{
-                fontSize: "var(--text-lg)",
-                fontWeight: 700,
-                marginBottom: "var(--space-3)",
-              }}
-            >
+            <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 12 }}>
               {isToday ? "Today's Habits" : "Habits"}
             </h2>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "var(--space-3)",
-              }}
-            >
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {dayHabits.map((habit) => {
                 const color = HABIT_COLORS[habit.color];
                 const completed = isCompleted(habit.id, selectedDate);
                 const streak = getStreak(habit.id);
-
                 return (
                   <div
                     key={habit.id}
                     onClick={() => toggleCompletion(habit.id, selectedDate)}
                     style={{
-                      padding: "var(--space-4)",
+                      padding: 16,
                       background: color.bg,
-                      borderRadius: "var(--radius-md)",
+                      borderRadius: 12,
                       cursor: "pointer",
                       position: "relative",
                       minHeight: 100,
@@ -359,51 +402,28 @@ export function Home(_props: HomeProps) {
                       transition: "all 200ms ease",
                     }}
                   >
-                    {/* Check indicator */}
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: 12,
-                        right: 12,
-                        width: 24,
-                        height: 24,
-                        borderRadius: 6,
-                        border: completed
-                          ? `2px solid ${color.fill}`
-                          : `2px solid ${color.text}40`,
-                        background: completed ? color.fill : "transparent",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        transition: "all 250ms cubic-bezier(0.34, 1.56, 0.64, 1)",
-                      }}
-                    >
+                    <div style={{
+                      position: "absolute",
+                      top: 12,
+                      right: 12,
+                      width: 24,
+                      height: 24,
+                      borderRadius: 6,
+                      border: completed ? `2px solid ${color.fill}` : `2px solid ${color.text}40`,
+                      background: completed ? color.fill : "transparent",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      transition: "all 250ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+                    }}>
                       {completed && <Check size={14} weight="bold" color="white" />}
                     </div>
-
-                    {/* Icon */}
-                    <div style={{ marginBottom: "var(--space-3)" }}>
+                    <div style={{ marginBottom: 12 }}>
                       <HabitIcon name={habit.icon} size={28} color={color.fill} />
                     </div>
-
-                    {/* Label */}
                     <div>
-                      <div
-                        style={{
-                          fontSize: "var(--text-base)",
-                          fontWeight: 600,
-                          color: color.text,
-                        }}
-                      >
-                        {habit.name}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "var(--text-sm)",
-                          color: `${color.text}99`,
-                          marginTop: 2,
-                        }}
-                      >
+                      <div style={{ fontSize: 15, fontWeight: 600, color: color.text }}>{habit.name}</div>
+                      <div style={{ fontSize: 13, color: `${color.text}99`, marginTop: 2 }}>
                         {streak > 0 ? `${streak} day streak` : habit.frequency}
                       </div>
                     </div>
@@ -411,16 +431,8 @@ export function Home(_props: HomeProps) {
                 );
               })}
             </div>
-
             {hasHiddenWeekly && (
-              <p
-                style={{
-                  fontSize: "var(--text-sm)",
-                  color: "var(--color-text-secondary)",
-                  textAlign: "center",
-                  marginTop: "var(--space-3)",
-                }}
-              >
+              <p style={{ fontSize: 13, color: "var(--color-text-secondary)", textAlign: "center", marginTop: 12 }}>
                 Weekly habits appear on Mondays
               </p>
             )}
@@ -435,10 +447,12 @@ function DateStrip({
   days,
   selectedDate,
   onSelect,
+  completedDates,
 }: {
   days: { dateKey: string; label: string; todayLabel: string; isToday: boolean }[];
   selectedDate: string;
   onSelect: (key: string) => void;
+  completedDates: Set<string>;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const todayRef = useRef<HTMLButtonElement>(null);
@@ -448,16 +462,13 @@ function DateStrip({
     const container = scrollRef.current;
     const el = todayRef.current;
     if (!container || !el) return;
-    const offset = el.offsetLeft - container.offsetWidth / 2 + el.offsetWidth / 2;
-    container.scrollLeft = offset;
+    container.scrollLeft = el.offsetLeft - container.offsetWidth / 2 + el.offsetWidth / 2;
   }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     const el = scrollRef.current;
     if (!el) return;
     dragState.current = { isDown: true, startX: e.clientX, scrollLeft: el.scrollLeft, moved: false };
-    el.setPointerCapture(e.pointerId);
-    el.style.cursor = "grabbing";
   }, []);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
@@ -467,18 +478,14 @@ function DateStrip({
     scrollRef.current!.scrollLeft = dragState.current.scrollLeft - dx;
   }, []);
 
-  const onPointerUp = useCallback((e: React.PointerEvent) => {
+  const onPointerUp = useCallback(() => {
     dragState.current.isDown = false;
-    const el = scrollRef.current;
-    if (el) {
-      el.releasePointerCapture(e.pointerId);
-      el.style.cursor = "grab";
-    }
   }, []);
 
-  const handleClick = useCallback((key: string) => {
-    if (!dragState.current.moved) onSelect(key);
-  }, [onSelect]);
+  const handleClick = useCallback(
+    (key: string) => { if (!dragState.current.moved) onSelect(key); },
+    [onSelect],
+  );
 
   return (
     <div
@@ -490,10 +497,10 @@ function DateStrip({
       style={{
         display: "flex",
         alignItems: "center",
-        gap: "var(--space-2)",
+        gap: 8,
         overflowX: "auto",
         margin: "0 -16px",
-        padding: "0 16px 4px",
+        padding: "4px 16px",
         scrollbarWidth: "none",
         cursor: "grab",
         userSelect: "none",
@@ -503,26 +510,46 @@ function DateStrip({
     >
       {days.map((day) => {
         const isSelected = day.dateKey === selectedDate;
+        const isDayCompleted = completedDates.has(day.dateKey) && !day.isToday && !isSelected;
+
         return (
           <button
             key={day.dateKey}
             ref={day.isToday ? todayRef : undefined}
             onClick={() => handleClick(day.dateKey)}
             style={{
-              padding: day.isToday ? "8px 16px" : "8px 4px",
-              borderRadius: 24,
+              height: 40,
+              minWidth: day.isToday ? 118 : 40,
+              padding: day.isToday ? "0 12px" : "0",
+              borderRadius: 9999,
               border: "none",
-              background: isSelected ? "var(--color-complete)" : "transparent",
-              color: isSelected ? "#fff" : "var(--color-text-secondary)",
-              fontSize: "var(--text-base)",
-              fontWeight: isSelected ? 600 : 400,
+              background: isSelected
+                ? "rgba(18,18,28,0.84)"
+                : isDayCompleted
+                  ? "#FFFFFF"
+                  : "rgba(98,104,128,0)",
+              color: isSelected
+                ? "#EAECF4"
+                : isDayCompleted
+                  ? "#282828"
+                  : "#EAECF4",
+              fontSize: 14,
+              fontWeight: 500,
+              fontFamily: "Inter, system-ui, sans-serif",
+              lineHeight: 1.2,
               whiteSpace: "nowrap",
               flexShrink: 0,
-              minWidth: day.isToday ? "auto" : 36,
               textAlign: "center",
               cursor: "pointer",
-              transition: "background 200ms ease, color 200ms ease",
-              fontFamily: "inherit",
+              boxShadow: isSelected || isDayCompleted
+                ? "0px 2px 2px 0px rgba(0,0,0,0.1)"
+                : isDayCompleted
+                  ? "none"
+                  : "0px 2px 1px rgba(0,0,0,0.1)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              position: "relative",
             }}
           >
             {day.isToday ? day.todayLabel : day.label}
@@ -545,33 +572,29 @@ function VitalCard({
   label: string;
 }) {
   return (
-    <div
-      style={{
-        padding: "var(--space-4)",
-        background: "var(--color-surface)",
-        borderRadius: "var(--radius-md)",
-        border: "1px solid var(--color-border)",
+    <div style={{
+      padding: 16,
+      background: "var(--color-surface)",
+      borderRadius: 12,
+      border: "1px solid var(--color-border)",
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+    }}>
+      <div style={{
+        width: 36,
+        height: 36,
+        borderRadius: "50%",
+        background: bg,
         display: "flex",
         alignItems: "center",
-        gap: "var(--space-3)",
-      }}
-    >
-      <div
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: "50%",
-          background: bg,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-        }}
-      >
+        justifyContent: "center",
+        flexShrink: 0,
+      }}>
         {icon}
       </div>
       <div>
-        <div style={{ fontSize: "var(--text-base)", fontWeight: 700 }}>{value}</div>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>{value}</div>
         <div style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>
           {label}
         </div>
