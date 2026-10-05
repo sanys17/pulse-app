@@ -3,6 +3,7 @@ import { Routes, Route } from "react-router-dom";
 import { BottomNav } from "./components/BottomNav";
 import { HabitsProvider, useHabitsContext } from "./context/HabitsContext";
 import { HabitForm } from "./components/HabitForm";
+import { QuickLog } from "./components/QuickLog";
 import { useTheme } from "./hooks/useTheme";
 import { Home } from "./pages/Home";
 import { Habits } from "./pages/Habits";
@@ -13,14 +14,16 @@ import type { Habit, HabitColor } from "./types";
 
 function AppContent() {
   const { theme, setTheme } = useTheme();
-  const { updateHabit, deleteHabit } = useHabitsContext();
+  const { addHabit, updateHabit, deleteHabit } = useHabitsContext();
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
+  const [showNewHabit, setShowNewHabit] = useState(false);
+  const [showQuickLog, setShowQuickLog] = useState(false);
 
   const handleEditFromHome = (habit: Habit) => {
     setEditingHabit(habit);
   };
 
-  const handleSaveFromHome = (data: {
+  const handleSaveEdit = (data: {
     name: string;
     icon: string;
     color: HabitColor;
@@ -30,6 +33,16 @@ function AppContent() {
       updateHabit(editingHabit.id, data);
       setEditingHabit(null);
     }
+  };
+
+  const handleSaveNew = (data: {
+    name: string;
+    icon: string;
+    color: HabitColor;
+    frequency: "daily" | "weekly";
+  }) => {
+    addHabit(data);
+    setShowNewHabit(false);
   };
 
   const handleDeleteFromHome = () => {
@@ -63,15 +76,29 @@ function AppContent() {
         </Routes>
       </div>
 
-      <BottomNav />
+      <BottomNav
+        onAddHabit={() => setShowNewHabit(true)}
+        onQuickLog={() => setShowQuickLog(true)}
+      />
 
       {editingHabit && (
         <HabitForm
           habit={editingHabit}
-          onSave={handleSaveFromHome}
+          onSave={handleSaveEdit}
           onDelete={handleDeleteFromHome}
           onClose={() => setEditingHabit(null)}
         />
+      )}
+
+      {showNewHabit && (
+        <HabitForm
+          onSave={handleSaveNew}
+          onClose={() => setShowNewHabit(false)}
+        />
+      )}
+
+      {showQuickLog && (
+        <QuickLog onClose={() => setShowQuickLog(false)} />
       )}
     </>
   );
