@@ -87,7 +87,6 @@ export function BottomNav() {
         <NavLink
           key={to}
           to={to}
-          end={to === "/"}
           role="tab"
           aria-label={label}
           style={({ isActive }) => ({
