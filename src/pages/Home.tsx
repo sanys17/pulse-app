@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Lightning, Moon, Footprints, Check } from "@phosphor-icons/react";
+import { Lightning, Moon, Footprints, Check, CalendarBlank } from "@phosphor-icons/react";
 import { useHabitsContext } from "../context/HabitsContext";
 import { useUltrahuman } from "../hooks/useUltrahuman";
+import { useGoogleCalendar, formatRelativeTime } from "../hooks/useGoogleCalendar";
 import { HabitIcon } from "../components/HabitIcon";
 import { HABIT_COLORS } from "../types";
 import type { Habit } from "../types";
@@ -155,6 +156,7 @@ export function Home(_props: HomeProps) {
     useHabitsContext();
   const { vitals, loading: vitalsLoading, refetch: refetchVitals } =
     useUltrahuman();
+  const calendar = useGoogleCalendar();
 
   const today = new Date();
   const todayKey = toDateKey(today);
@@ -396,7 +398,52 @@ export function Home(_props: HomeProps) {
           borderRadius: 20,
           padding: "16px 15px",
         }}>
-          {nextHabits.length > 0 ? (
+          {calendar.connected && calendar.events.length > 0 ? (
+            calendar.events.map((event, i) => {
+              const startStr = event.start.dateTime || event.start.date || "";
+              return (
+                <div key={event.id}>
+                  {i > 0 && (
+                    <div style={{ height: 1, background: "rgba(234,236,244,0.08)", margin: "10px 0" }} />
+                  )}
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "5px 0",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <CalendarBlank size={15} weight="regular" color="white" />
+                      <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "white" }}>
+                        {event.summary || "No title"}
+                      </span>
+                    </div>
+                    <span style={{ fontFamily: geist, fontWeight: 300, fontSize: 14, color: "white" }}>
+                      {startStr ? formatRelativeTime(startStr) : ""}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          ) : calendar.connected && !calendar.loading ? (
+            <p style={{
+              fontFamily: geist, fontWeight: 500, fontSize: 16,
+              color: "rgba(234,236,244,0.5)", textAlign: "center", margin: 0, padding: "8px 0",
+            }}>
+              No upcoming events
+            </p>
+          ) : calendar.available && !calendar.connected ? (
+            <div
+              onClick={calendar.connect}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                gap: 8, cursor: "pointer", padding: "8px 0",
+              }}
+            >
+              <CalendarBlank size={16} weight="regular" color="rgba(142,155,196,0.8)" />
+              <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "rgba(142,155,196,0.8)" }}>
+                Connect Calendar
+              </span>
+            </div>
+          ) : nextHabits.length > 0 ? (
             nextHabits.map((habit, i) => (
               <div key={habit.id}>
                 {i > 0 && (
