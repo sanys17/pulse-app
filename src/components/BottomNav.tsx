@@ -4,21 +4,16 @@ import {
   House,
   CalendarBlank,
   UsersThree,
-  User,
   Plus,
   Target,
   ListChecks,
   CheckCircle,
 } from "@phosphor-icons/react";
 
-const leftTabs = [
-  { to: "/", label: "Home", Icon: House },
+const navTabs = [
   { to: "/calendar", label: "Calendar", Icon: CalendarBlank },
-] as const;
-
-const rightTabs = [
+  { to: "/", label: "Home", Icon: House },
   { to: "/social", label: "Social", Icon: UsersThree },
-  { to: "/settings", label: "Profile", Icon: User },
 ] as const;
 
 interface BottomNavProps {
@@ -87,11 +82,10 @@ export function BottomNav({ onAddHabit, onQuickLog }: BottomNavProps) {
           style={{
             position: "fixed",
             bottom: 80,
-            left: "50%",
-            transform: "translateX(-50%)",
+            right: 16,
             display: "flex",
             flexDirection: "column",
-            alignItems: "center",
+            alignItems: "flex-end",
             gap: 12,
             zIndex: 51,
           }}
@@ -136,28 +130,29 @@ export function BottomNav({ onAddHabit, onQuickLog }: BottomNavProps) {
         </div>
       )}
 
-      {/* Glass nav — exact Figma: 288×47, rgba(142,155,196,0.15), rounded-100 */}
+      {/* Glass nav — Figma: 186×46, rgba(98,104,128,0.2), rounded-[23px] */}
       <nav
         role="tablist"
         aria-label="Main navigation"
         style={{
           position: "fixed",
-          bottom: 24,
+          bottom: 20,
           left: "50%",
           transform: "translateX(-50%)",
-          width: 288,
-          height: 47,
-          background: "rgba(142,155,196,0.15)",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          borderRadius: 100,
+          width: 186,
+          height: 46,
+          background: "rgba(98,104,128,0.18)",
+          backdropFilter: "saturate(180%) blur(20px)",
+          WebkitBackdropFilter: "saturate(180%) blur(20px)",
+          border: "1px solid rgba(234,236,244,0.08)",
+          borderRadius: 23,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-evenly",
           zIndex: 50,
         }}
       >
-        {leftTabs.map(({ to, label, Icon }) => (
+        {navTabs.map(({ to, label, Icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -168,82 +163,49 @@ export function BottomNav({ onAddHabit, onQuickLog }: BottomNavProps) {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              width: 34,
-              height: 18,
+              width: isActive ? 42 : 30,
+              height: isActive ? 44 : 30,
+              borderRadius: isActive ? 13 : 0,
+              background: isActive ? "rgba(255,255,255,0.1)" : "transparent",
               textDecoration: "none",
               color: isActive ? "#EAECF4" : "rgba(234,236,244,0.4)",
-              transition: "color 200ms ease",
+              transition: "all 200ms ease",
             })}
           >
             {({ isActive }) => (
-              <Icon size={18} weight={isActive ? "fill" : "regular"} aria-hidden="true" />
+              <Icon size={22} weight={isActive ? "fill" : "regular"} aria-hidden="true" />
             )}
           </NavLink>
         ))}
-
-        {/* FAB — 38×38, #8E9BC4 */}
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => setOpen((v) => !v)}
-          aria-label={open ? "Close menu" : "Quick actions"}
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: "50%",
-            border: "none",
-            background: "#8E9BC4",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            boxShadow: "0 2px 8px rgba(142,155,196,0.35)",
-            transition: "transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1)",
-            transform: open ? "rotate(45deg)" : "rotate(0deg)",
-          }}
-        >
-          <Plus size={20} weight="bold" color="#07070C" />
-        </button>
-
-        {rightTabs.map(({ to, label, Icon }) => {
-          const isProfile = to === "/settings";
-          return (
-            <NavLink
-              key={to}
-              to={to}
-              role="tab"
-              aria-label={label}
-              style={({ isActive }) => ({
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                textDecoration: "none",
-                transition: "color 200ms ease",
-                color: isActive ? "#EAECF4" : "rgba(234,236,244,0.4)",
-                ...(isProfile
-                  ? {
-                      width: 20,
-                      height: 20,
-                      borderRadius: 100,
-                      border: "1px solid #8e9bc4",
-                      overflow: "hidden",
-                    }
-                  : {
-                      width: 26,
-                      height: 18,
-                    }),
-              })}
-            >
-              {({ isActive }) => (
-                <Icon
-                  size={isProfile ? 12 : 18}
-                  weight={isActive ? "fill" : "regular"}
-                  aria-hidden="true"
-                />
-              )}
-            </NavLink>
-          );
-        })}
       </nav>
+
+      {/* FAB — Figma: separate, bottom-right, 44×44 circle, rgba(142,155,196,0.34) */}
+      <button
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={() => setOpen((v) => !v)}
+        aria-label={open ? "Close menu" : "Quick actions"}
+        style={{
+          position: "fixed",
+          bottom: 21,
+          right: 16,
+          width: 44,
+          height: 44,
+          borderRadius: "50%",
+          border: "1px solid rgba(142,155,196,0.15)",
+          background: "rgba(142,155,196,0.25)",
+          backdropFilter: "saturate(180%) blur(20px)",
+          WebkitBackdropFilter: "saturate(180%) blur(20px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          zIndex: 50,
+          transition: "transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+          transform: open ? "rotate(45deg)" : "rotate(0deg)",
+        }}
+      >
+        <Plus size={20} weight="bold" color="#EAECF4" />
+      </button>
 
       <style>{`
         @keyframes fabIn {

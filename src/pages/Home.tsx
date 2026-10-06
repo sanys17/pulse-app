@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heartbeat, Moon, Footprints, WaveTriangle, Lightning, Check } from "@phosphor-icons/react";
+import { Lightning, Moon, Footprints, Check } from "@phosphor-icons/react";
 import { useHabitsContext } from "../context/HabitsContext";
 import { useUltrahuman } from "../hooks/useUltrahuman";
 import { HabitIcon } from "../components/HabitIcon";
@@ -54,7 +54,6 @@ function PulseScoreArc({ score }: { score: number }) {
       justifyContent: "center",
       overflow: "visible",
     }}>
-      {/* Glow ellipse — exact Figma asset, 302px container with -32.95% inset overflow */}
       <div style={{
         position: "absolute",
         width: 302,
@@ -73,7 +72,6 @@ function PulseScoreArc({ score }: { score: number }) {
         </div>
       </div>
 
-      {/* Arc track — exact Figma Subtract SVG, 234.628×118 */}
       <div style={{
         position: "absolute",
         top: 10,
@@ -89,7 +87,6 @@ function PulseScoreArc({ score }: { score: number }) {
         />
       </div>
 
-      {/* Arc fill — dynamic SVG with exact Figma gradient */}
       {score > 0 && (
         <div style={{
           position: "absolute",
@@ -117,7 +114,6 @@ function PulseScoreArc({ score }: { score: number }) {
         </div>
       )}
 
-      {/* Score text — Geist Bold 64px, positioned to match Figma */}
       <p style={{
         position: "absolute",
         top: 54,
@@ -134,7 +130,6 @@ function PulseScoreArc({ score }: { score: number }) {
         {score}
       </p>
 
-      {/* "Pulse Score" label — Geist Medium 16px */}
       <p style={{
         position: "absolute",
         top: 128,
@@ -247,10 +242,58 @@ export function Home(_props: HomeProps) {
     return dateSet;
   }, [habits, completions, todayKey]);
 
-  const nextHabit = dayHabits.find((h) => !isCompleted(h.id, selectedDate));
+  const nextHabits = useMemo(
+    () => dayHabits.filter((h) => !isCompleted(h.id, selectedDate)).slice(0, 2),
+    [dayHabits, isCompleted, selectedDate],
+  );
+
+  const [tasks, setTasks] = useState(() => {
+    try {
+      const saved = localStorage.getItem("pulse-tasks");
+      if (saved) return JSON.parse(saved) as { id: string; label: string; done: boolean }[];
+    } catch { /* ignore */ }
+    return [
+      { id: "t1", label: "Review App Design", done: false },
+      { id: "t2", label: "Call Marc", done: false },
+      { id: "t3", label: "Schedule a Meeting", done: false },
+    ];
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("pulse-tasks", JSON.stringify(tasks)); } catch { /* ignore */ }
+  }, [tasks]);
+
+  const toggleTask = (id: string) => {
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, done: !t.done } : t));
+  };
+
+  const geist = "Geist, Inter, system-ui, sans-serif";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, overflow: "visible" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20, overflow: "visible", position: "relative" }}>
+      {/* Profile avatar — Figma: 32×32 circle, border 1px #8E9BC4, top-right */}
+      <div
+        onClick={() => navigate("/settings")}
+        style={{
+          position: "absolute",
+          top: -4,
+          right: 0,
+          width: 32,
+          height: 32,
+          borderRadius: 100,
+          border: "1px solid #8E9BC4",
+          overflow: "hidden",
+          cursor: "pointer",
+          zIndex: 10,
+        }}
+      >
+        <img
+          src="/assets/profile-avatar.png"
+          alt="Profile"
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      </div>
+
       <PulseScoreArc score={progressPercent} />
 
       <DateStrip
@@ -275,169 +318,243 @@ export function Home(_props: HomeProps) {
         </p>
       )}
 
-      {habits.length === 0 ? (
-        <div style={{
-          textAlign: "center",
-          padding: "40px 16px",
-          color: "var(--color-text-secondary)",
-        }}>
-          <p style={{ fontSize: 17, fontWeight: 600 }}>No habits yet</p>
-          <p style={{ fontSize: 13, marginTop: 8 }}>Start building your daily routine</p>
-          <button
-            onClick={() => navigate("/habits")}
-            style={{
-              marginTop: 16,
-              padding: "12px 24px",
-              background: "var(--color-text)",
-              color: "var(--color-canvas)",
-              borderRadius: 12,
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            Add your first habit
-          </button>
-        </div>
-      ) : (
-        <>
-          {!vitalsLoading && vitals && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {vitals.sleep && (
-                <VitalCard
-                  icon={<Moon size={18} weight="bold" color="var(--color-habit-purple-text)" />}
-                  bg="var(--color-habit-purple-bg)"
-                  value={`${Math.floor(vitals.sleep.totalMinutes / 60)}h ${vitals.sleep.totalMinutes % 60}m`}
-                  label="Sleep"
-                />
-              )}
-              {vitals.hr && (
-                <VitalCard
-                  icon={<Heartbeat size={18} weight="bold" color="var(--color-habit-red-text)" />}
-                  bg="var(--color-habit-red-bg)"
-                  value={`${vitals.hr.avg} bpm`}
-                  label="Heart Rate"
-                />
-              )}
-              {vitals.hrv && (
-                <VitalCard
-                  icon={<WaveTriangle size={18} weight="bold" color="var(--color-habit-blue-text)" />}
-                  bg="var(--color-habit-blue-bg)"
-                  value={`${vitals.hrv.avg} ms`}
-                  label="HRV"
-                />
-              )}
-              {vitals.recovery ? (
-                <VitalCard
-                  icon={<Lightning size={18} weight="bold" color="var(--color-habit-yellow-text)" />}
-                  bg="var(--color-habit-yellow-bg)"
-                  value={String(vitals.recovery.score)}
-                  label="Recovery"
-                />
-              ) : vitals.steps ? (
-                <VitalCard
-                  icon={<Footprints size={18} weight="bold" color="var(--color-habit-green-text)" />}
-                  bg="var(--color-habit-green-bg)"
-                  value={vitals.steps.total.toLocaleString()}
-                  label="Steps"
-                />
-              ) : null}
+      {/* Vitals pills — Figma: compact row, bg rgba(28,28,42,0.2), rounded-full, gap 16 */}
+      {!vitalsLoading && vitals && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+          {vitals.recovery && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: 8, background: "rgba(28,28,42,0.25)", borderRadius: 100,
+              backdropFilter: "saturate(180%) blur(16px)",
+              WebkitBackdropFilter: "saturate(180%) blur(16px)",
+              border: "1px solid rgba(234,236,244,0.06)",
+            }}>
+              <Lightning size={14} weight="fill" color="white" />
+              <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
+                {vitals.recovery.score}
+              </span>
             </div>
           )}
+          {vitals.sleep && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: 8, background: "rgba(28,28,42,0.25)", borderRadius: 100,
+              backdropFilter: "saturate(180%) blur(16px)",
+              WebkitBackdropFilter: "saturate(180%) blur(16px)",
+              border: "1px solid rgba(234,236,244,0.06)",
+            }}>
+              <Moon size={13} weight="fill" color="white" />
+              <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
+                {Math.floor(vitals.sleep.totalMinutes / 60)}h {vitals.sleep.totalMinutes % 60}m
+              </span>
+            </div>
+          )}
+          {vitals.steps && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: 8, background: "rgba(28,28,42,0.25)", borderRadius: 100,
+              backdropFilter: "saturate(180%) blur(16px)",
+              WebkitBackdropFilter: "saturate(180%) blur(16px)",
+              border: "1px solid rgba(234,236,244,0.06)",
+            }}>
+              <Footprints size={14} weight="fill" color="white" />
+              <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
+                {vitals.steps.total >= 1000 ? `${(vitals.steps.total / 1000).toFixed(1)}k` : vitals.steps.total}
+              </span>
+            </div>
+          )}
+          {!vitals.steps && vitals.hrv && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: 8, background: "rgba(28,28,42,0.25)", borderRadius: 100,
+              backdropFilter: "saturate(180%) blur(16px)",
+              WebkitBackdropFilter: "saturate(180%) blur(16px)",
+              border: "1px solid rgba(234,236,244,0.06)",
+            }}>
+              <Footprints size={14} weight="fill" color="white" />
+              <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
+                {vitals.hrv.avg}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
-          {nextHabit && (
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <div>
-                <span style={{ fontSize: 13, color: "var(--color-text-secondary)", fontWeight: 500 }}>
-                  Next Habit
+      {/* Next Up — Figma: Geist Bold 18px header + dark card (rgba(28,28,42,0.65), rx=20) */}
+      <section style={{ marginTop: 8 }}>
+        <h2 style={{
+          fontFamily: geist, fontWeight: 700, fontSize: 18,
+          color: "#EAECF4", margin: "0 0 12px 0",
+        }}>
+          Next Up
+        </h2>
+        <div style={{
+          background: "rgba(28,28,42,0.5)",
+          backdropFilter: "saturate(180%) blur(20px)",
+          WebkitBackdropFilter: "saturate(180%) blur(20px)",
+          border: "1px solid rgba(234,236,244,0.06)",
+          borderRadius: 20,
+          padding: "16px 15px",
+        }}>
+          {nextHabits.length > 0 ? (
+            nextHabits.map((habit, i) => (
+              <div key={habit.id}>
+                {i > 0 && (
+                  <div style={{ height: 1, background: "rgba(234,236,244,0.08)", margin: "10px 0" }} />
+                )}
+                <div
+                  onClick={() => toggleCompletion(habit.id, selectedDate)}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    cursor: "pointer", padding: "5px 0",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <HabitIcon name={habit.icon} size={15} color="white" />
+                    <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "white" }}>
+                      {habit.name}
+                    </span>
+                  </div>
+                  <span style={{ fontFamily: geist, fontWeight: 300, fontSize: 14, color: "white" }}>
+                    {getStreak(habit.id) > 0 ? `${getStreak(habit.id)} day streak` : habit.frequency}
+                  </span>
+                </div>
+              </div>
+            ))
+          ) : habits.length > 0 ? (
+            <p style={{
+              fontFamily: geist, fontWeight: 500, fontSize: 16,
+              color: "rgba(234,236,244,0.5)", textAlign: "center", margin: 0, padding: "8px 0",
+            }}>
+              All done for today
+            </p>
+          ) : (
+            <div
+              onClick={() => navigate("/habits")}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", padding: "8px 0",
+              }}
+            >
+              <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "rgba(234,236,244,0.5)" }}>
+                Add your first habit
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Today's Tasks — Figma: Geist Bold 18px header + task list with 17×17 checkboxes */}
+      <section>
+        <h2 style={{
+          fontFamily: geist, fontWeight: 700, fontSize: 18,
+          color: "#EAECF4", margin: "0 0 16px 0",
+        }}>
+          Today's Tasks
+        </h2>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {tasks.map((task, i) => (
+            <div key={task.id}>
+              <div
+                onClick={() => toggleTask(task.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 16,
+                  cursor: "pointer", padding: "8px 0",
+                }}
+              >
+                <div style={{
+                  width: 17, height: 17, flexShrink: 0,
+                  border: "1px solid #8E9BC4",
+                  background: task.done ? "#8E9BC4" : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 200ms ease",
+                }}>
+                  {task.done && <Check size={11} weight="bold" color="#07070C" />}
+                </div>
+                <span style={{
+                  fontFamily: geist, fontWeight: 500, fontSize: 18, color: "white",
+                  textDecoration: task.done ? "line-through" : "none",
+                  opacity: task.done ? 0.5 : 1,
+                  transition: "all 200ms ease",
+                }}>
+                  {task.label}
                 </span>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+              </div>
+              {i < tasks.length - 1 && (
+                <div style={{ height: 1, background: "rgba(234,236,244,0.08)", width: 201 }} />
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Today's Habits — below fold, existing grid */}
+      {habits.length > 0 && dayHabits.length > 0 && (
+        <section>
+          <h2 style={{
+            fontFamily: geist, fontWeight: 700, fontSize: 18,
+            color: "#EAECF4", margin: "0 0 12px 0",
+          }}>
+            {isToday ? "Today's Habits" : "Habits"}
+          </h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {dayHabits.map((habit) => {
+              const color = HABIT_COLORS[habit.color];
+              const completed = isCompleted(habit.id, selectedDate);
+              const streak = getStreak(habit.id);
+              return (
+                <div
+                  key={habit.id}
+                  onClick={() => toggleCompletion(habit.id, selectedDate)}
+                  style={{
+                    padding: 16,
+                    background: color.bg,
+                    borderRadius: 12,
+                    cursor: "pointer",
+                    position: "relative",
+                    minHeight: 100,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    opacity: completed ? 0.7 : 1,
+                    transition: "all 200ms ease",
+                  }}
+                >
                   <div style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 8,
-                    background: HABIT_COLORS[nextHabit.color].bg,
+                    position: "absolute",
+                    top: 12,
+                    right: 12,
+                    width: 24,
+                    height: 24,
+                    borderRadius: 6,
+                    border: completed ? `2px solid ${color.fill}` : `2px solid ${color.text}40`,
+                    background: completed ? color.fill : "transparent",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
+                    transition: "all 250ms cubic-bezier(0.34, 1.56, 0.64, 1)",
                   }}>
-                    <HabitIcon name={nextHabit.icon} size={22} color={HABIT_COLORS[nextHabit.color].fill} />
+                    {completed && <Check size={14} weight="bold" color="white" />}
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <HabitIcon name={habit.icon} size={28} color={color.fill} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 17, fontWeight: 600 }}>{nextHabit.name}</div>
-                    <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-                      {getStreak(nextHabit.id) > 0
-                        ? `${getStreak(nextHabit.id)} day streak`
-                        : nextHabit.frequency}
+                    <div style={{ fontSize: 15, fontWeight: 600, color: color.text }}>{habit.name}</div>
+                    <div style={{ fontSize: 13, color: `${color.text}99`, marginTop: 2 }}>
+                      {streak > 0 ? `${streak} day streak` : habit.frequency}
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              );
+            })}
+          </div>
+          {hasHiddenWeekly && (
+            <p style={{ fontSize: 13, color: "var(--color-text-secondary)", textAlign: "center", marginTop: 12 }}>
+              Weekly habits appear on Mondays
+            </p>
           )}
-
-          <section>
-            <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 12 }}>
-              {isToday ? "Today's Habits" : "Habits"}
-            </h2>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {dayHabits.map((habit) => {
-                const color = HABIT_COLORS[habit.color];
-                const completed = isCompleted(habit.id, selectedDate);
-                const streak = getStreak(habit.id);
-                return (
-                  <div
-                    key={habit.id}
-                    onClick={() => toggleCompletion(habit.id, selectedDate)}
-                    style={{
-                      padding: 16,
-                      background: color.bg,
-                      borderRadius: 12,
-                      cursor: "pointer",
-                      position: "relative",
-                      minHeight: 100,
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "space-between",
-                      opacity: completed ? 0.7 : 1,
-                      transition: "all 200ms ease",
-                    }}
-                  >
-                    <div style={{
-                      position: "absolute",
-                      top: 12,
-                      right: 12,
-                      width: 24,
-                      height: 24,
-                      borderRadius: 6,
-                      border: completed ? `2px solid ${color.fill}` : `2px solid ${color.text}40`,
-                      background: completed ? color.fill : "transparent",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      transition: "all 250ms cubic-bezier(0.34, 1.56, 0.64, 1)",
-                    }}>
-                      {completed && <Check size={14} weight="bold" color="white" />}
-                    </div>
-                    <div style={{ marginBottom: 12 }}>
-                      <HabitIcon name={habit.icon} size={28} color={color.fill} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: color.text }}>{habit.name}</div>
-                      <div style={{ fontSize: 13, color: `${color.text}99`, marginTop: 2 }}>
-                        {streak > 0 ? `${streak} day streak` : habit.frequency}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {hasHiddenWeekly && (
-              <p style={{ fontSize: 13, color: "var(--color-text-secondary)", textAlign: "center", marginTop: 12 }}>
-                Weekly habits appear on Mondays
-              </p>
-            )}
-          </section>
-        </>
+        </section>
       )}
     </div>
   );
@@ -543,9 +660,7 @@ function DateStrip({
               cursor: "pointer",
               boxShadow: isSelected || isDayCompleted
                 ? "0px 2px 2px 0px rgba(0,0,0,0.1)"
-                : isDayCompleted
-                  ? "none"
-                  : "0px 2px 1px rgba(0,0,0,0.1)",
+                : "0px 2px 1px rgba(0,0,0,0.1)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -556,49 +671,6 @@ function DateStrip({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function VitalCard({
-  icon,
-  bg,
-  value,
-  label,
-}: {
-  icon: React.ReactNode;
-  bg: string;
-  value: string;
-  label: string;
-}) {
-  return (
-    <div style={{
-      padding: 16,
-      background: "var(--color-surface)",
-      borderRadius: 12,
-      border: "1px solid var(--color-border)",
-      display: "flex",
-      alignItems: "center",
-      gap: 12,
-    }}>
-      <div style={{
-        width: 36,
-        height: 36,
-        borderRadius: "50%",
-        background: bg,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-      }}>
-        {icon}
-      </div>
-      <div>
-        <div style={{ fontSize: 15, fontWeight: 700 }}>{value}</div>
-        <div style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>
-          {label}
-        </div>
-      </div>
     </div>
   );
 }
