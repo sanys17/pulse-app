@@ -49,7 +49,7 @@ function PulseScoreArc({ score }: { score: number }) {
     <div style={{
       position: "relative",
       width: "100%",
-      height: 200,
+      height: 155,
       display: "flex",
       alignItems: "flex-start",
       justifyContent: "center",
