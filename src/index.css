@@ -204,6 +204,7 @@ body {
   background: var(--color-canvas);
   overflow-x: hidden;
   overscroll-behavior-y: none;
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 ::selection {
