@@ -57,24 +57,6 @@ function PulseScoreArc({ score }: { score: number }) {
     }}>
       <div style={{
         position: "absolute",
-        width: 400,
-        height: 400,
-        top: -250,
-        left: "50%",
-        transform: "translateX(-50%)",
-        pointerEvents: "none",
-      }}>
-        <div style={{ position: "absolute", inset: "-30%" }}>
-          <img
-            alt=""
-            src="/assets/glow-ellipse.svg"
-            style={{ display: "block", width: "100%", height: "100%", maxWidth: "none" }}
-          />
-        </div>
-      </div>
-
-      <div style={{
-        position: "absolute",
         top: 10,
         left: "50%",
         transform: "translateX(-50%)",
@@ -272,7 +254,27 @@ export function Home(_props: HomeProps) {
   const geist = "Geist, Inter, system-ui, sans-serif";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, overflow: "visible", position: "relative" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20, overflow: "visible", position: "relative", zIndex: 1 }}>
+      {/* Fixed glow — stays locked while content scrolls */}
+      <div style={{
+        position: "fixed",
+        top: -100,
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: 400,
+        height: 400,
+        pointerEvents: "none",
+        zIndex: 0,
+      }}>
+        <div style={{ position: "absolute", inset: "-30%" }}>
+          <img
+            alt=""
+            src="/assets/glow-ellipse.svg"
+            style={{ display: "block", width: "100%", height: "100%", maxWidth: "none" }}
+          />
+        </div>
+      </div>
+
       {/* Profile avatar — Figma: 32×32 circle, border 1px #8E9BC4, top-right */}
       <div
         onClick={() => navigate("/settings")}
