@@ -278,7 +278,7 @@ export function Home(_props: HomeProps) {
         onClick={() => navigate("/settings")}
         style={{
           position: "absolute",
-          top: "calc(env(safe-area-inset-top, 0px) + 4px)",
+          top: -4,
           right: 0,
           width: 32,
           height: 32,
