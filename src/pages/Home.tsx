@@ -57,14 +57,14 @@ function PulseScoreArc({ score }: { score: number }) {
     }}>
       <div style={{
         position: "absolute",
-        width: 302,
-        height: 302,
-        top: -150,
+        width: 400,
+        height: 400,
+        top: -250,
         left: "50%",
         transform: "translateX(-50%)",
         pointerEvents: "none",
       }}>
-        <div style={{ position: "absolute", inset: "-32.95%" }}>
+        <div style={{ position: "absolute", inset: "-30%" }}>
           <img
             alt=""
             src="/assets/glow-ellipse.svg"
@@ -278,7 +278,7 @@ export function Home(_props: HomeProps) {
         onClick={() => navigate("/settings")}
         style={{
           position: "absolute",
-          top: -4,
+          top: "calc(env(safe-area-inset-top, 0px) + 4px)",
           right: 0,
           width: 32,
           height: 32,
