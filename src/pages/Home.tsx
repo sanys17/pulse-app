@@ -338,10 +338,11 @@ export function Home(_props: HomeProps) {
           {vitals.recovery && (
             <div style={{
               display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 12px", background: "rgba(98,104,128,0.18)", borderRadius: 100,
-              backdropFilter: "saturate(180%) blur(20px)",
-              WebkitBackdropFilter: "saturate(180%) blur(20px)",
-              border: "1px solid rgba(234,236,244,0.08)",
+              padding: "6px 12px", background: "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12) 0%, transparent 50%), rgba(98,104,128,0.20)", borderRadius: 100,
+              backdropFilter: "blur(4px) saturate(120%)",
+              WebkitBackdropFilter: "blur(4px) saturate(120%)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              boxShadow: "inset 1px 1px 3px 0 rgba(255,255,255,0.10)",
             }}>
               <Lightning size={14} weight="fill" color="white" />
               <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
@@ -352,10 +353,11 @@ export function Home(_props: HomeProps) {
           {vitals.sleep && (
             <div style={{
               display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 12px", background: "rgba(98,104,128,0.18)", borderRadius: 100,
-              backdropFilter: "saturate(180%) blur(20px)",
-              WebkitBackdropFilter: "saturate(180%) blur(20px)",
-              border: "1px solid rgba(234,236,244,0.08)",
+              padding: "6px 12px", background: "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12) 0%, transparent 50%), rgba(98,104,128,0.20)", borderRadius: 100,
+              backdropFilter: "blur(4px) saturate(120%)",
+              WebkitBackdropFilter: "blur(4px) saturate(120%)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              boxShadow: "inset 1px 1px 3px 0 rgba(255,255,255,0.10)",
             }}>
               <Moon size={13} weight="fill" color="white" />
               <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
@@ -366,10 +368,11 @@ export function Home(_props: HomeProps) {
           {vitals.steps && (
             <div style={{
               display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 12px", background: "rgba(98,104,128,0.18)", borderRadius: 100,
-              backdropFilter: "saturate(180%) blur(20px)",
-              WebkitBackdropFilter: "saturate(180%) blur(20px)",
-              border: "1px solid rgba(234,236,244,0.08)",
+              padding: "6px 12px", background: "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12) 0%, transparent 50%), rgba(98,104,128,0.20)", borderRadius: 100,
+              backdropFilter: "blur(4px) saturate(120%)",
+              WebkitBackdropFilter: "blur(4px) saturate(120%)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              boxShadow: "inset 1px 1px 3px 0 rgba(255,255,255,0.10)",
             }}>
               <Footprints size={14} weight="fill" color="white" />
               <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
@@ -380,10 +383,11 @@ export function Home(_props: HomeProps) {
           {!vitals.steps && vitals.hrv && (
             <div style={{
               display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 12px", background: "rgba(98,104,128,0.18)", borderRadius: 100,
-              backdropFilter: "saturate(180%) blur(20px)",
-              WebkitBackdropFilter: "saturate(180%) blur(20px)",
-              border: "1px solid rgba(234,236,244,0.08)",
+              padding: "6px 12px", background: "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12) 0%, transparent 50%), rgba(98,104,128,0.20)", borderRadius: 100,
+              backdropFilter: "blur(4px) saturate(120%)",
+              WebkitBackdropFilter: "blur(4px) saturate(120%)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              boxShadow: "inset 1px 1px 3px 0 rgba(255,255,255,0.10)",
             }}>
               <Footprints size={14} weight="fill" color="white" />
               <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
@@ -403,10 +407,11 @@ export function Home(_props: HomeProps) {
           Next Up
         </h2>
         <div style={{
-          background: "rgba(98,104,128,0.18)",
-          backdropFilter: "saturate(180%) blur(20px)",
-          WebkitBackdropFilter: "saturate(180%) blur(20px)",
-          border: "1px solid rgba(234,236,244,0.08)",
+          background: "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12) 0%, transparent 50%), rgba(98,104,128,0.20)",
+          backdropFilter: "blur(4px) saturate(120%)",
+          WebkitBackdropFilter: "blur(4px) saturate(120%)",
+          border: "1px solid rgba(255,255,255,0.10)",
+          boxShadow: "inset 1px 1px 3px 0 rgba(255,255,255,0.10)",
           borderRadius: 20,
           padding: "16px 15px",
         }}>
@@ -700,12 +705,14 @@ function DateStrip({
               minWidth: day.isToday ? 118 : 40,
               padding: day.isToday ? "0 12px" : "0",
               borderRadius: 9999,
-              border: "none",
+              border: isDayCompleted ? "none" : "1px solid rgba(255,255,255,0.10)",
               background: isSelected
-                ? "rgba(18,18,28,0.84)"
+                ? "radial-gradient(circle at 25% 20%, rgba(255,255,255,0.10) 0%, transparent 55%), rgba(18,18,28,0.84)"
                 : isDayCompleted
                   ? "#FFFFFF"
-                  : "rgba(98,104,128,0)",
+                  : "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12) 0%, transparent 50%)",
+              backdropFilter: isDayCompleted ? "none" : isSelected ? "blur(15px) saturate(120%)" : "blur(4px) saturate(120%)",
+              WebkitBackdropFilter: isDayCompleted ? "none" : isSelected ? "blur(15px) saturate(120%)" : "blur(4px) saturate(120%)",
               color: isSelected
                 ? "#EAECF4"
                 : isDayCompleted
@@ -719,9 +726,11 @@ function DateStrip({
               flexShrink: 0,
               textAlign: "center",
               cursor: "pointer",
-              boxShadow: isSelected || isDayCompleted
-                ? "0px 2px 2px 0px rgba(0,0,0,0.1)"
-                : "0px 2px 1px rgba(0,0,0,0.1)",
+              boxShadow: isSelected
+                ? "inset 1px 1px 4px 0 rgba(255,255,255,0.12), 0px 2px 2px 0px rgba(0,0,0,0.1)"
+                : isDayCompleted
+                  ? "0px 2px 2px 0px rgba(0,0,0,0.1)"
+                  : "inset 1px 1px 3px 0 rgba(255,255,255,0.10), 0px 2px 1px rgba(0,0,0,0.1)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
