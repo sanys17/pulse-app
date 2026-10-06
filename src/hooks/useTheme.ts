@@ -8,7 +8,7 @@ function getStoredTheme(): Theme {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "light" || stored === "dark" || stored === "system") return stored;
   } catch {}
-  return "system";
+  return "dark";
 }
 
 function resolveTheme(theme: Theme): "light" | "dark" {
@@ -28,7 +28,7 @@ function applyTheme(theme: Theme) {
 
   const metaTheme = document.querySelector('meta[name="theme-color"]');
   if (metaTheme) {
-    metaTheme.setAttribute("content", resolved === "dark" ? "#1C1C1E" : "#F7F6F3");
+    metaTheme.setAttribute("content", resolved === "dark" ? "#07070C" : "#F4F5FA");
   }
 }
 
