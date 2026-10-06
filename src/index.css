@@ -64,8 +64,47 @@
   --radius-lg: 16px;
 }
 
-/* ─── Semantic tokens (light) ─── */
+/* ─── Semantic tokens (default: dark — app is OLED-first) ─── */
 :root {
+  --color-canvas: var(--p-base);
+  --color-surface: var(--p-surface);
+  --color-surface-dim: var(--p-elevated);
+  --color-border: var(--p-border-dark);
+  --color-text: var(--p-text);
+  --color-text-secondary: var(--p-muted);
+  --color-text-tertiary: #9496A8;
+  --color-complete: var(--p-accent);
+  --color-complete-bg: rgba(142, 155, 196, 0.14);
+  --color-accent: var(--p-accent);
+
+  --color-habit-red-bg: rgba(159, 47, 45, 0.18);
+  --color-habit-red-text: #E06050;
+  --color-habit-blue-bg: rgba(83, 155, 245, 0.14);
+  --color-habit-blue-text: #6CB6FF;
+  --color-habit-green-bg: rgba(87, 171, 90, 0.14);
+  --color-habit-green-text: #7EE787;
+  --color-habit-yellow-bg: rgba(198, 144, 38, 0.14);
+  --color-habit-yellow-text: #E8C56A;
+  --color-habit-purple-bg: rgba(152, 110, 226, 0.14);
+  --color-habit-purple-text: #B392F0;
+  --color-habit-orange-bg: rgba(204, 107, 44, 0.14);
+  --color-habit-orange-text: #E0915A;
+
+  --color-heat-0: transparent;
+  --color-heat-1: rgba(142, 155, 196, 0.14);
+  --color-heat-2: rgba(142, 155, 196, 0.30);
+  --color-heat-3: rgba(142, 155, 196, 0.52);
+  --color-heat-4: rgba(142, 155, 196, 0.78);
+
+  --color-nav-bg: rgba(18, 18, 28, 0.92);
+  --color-nav-active: var(--p-text);
+  --color-nav-inactive: var(--p-muted);
+
+  color-scheme: dark;
+}
+
+/* ─── Light (manual toggle only) ─── */
+:root[data-theme="light"] {
   --color-canvas: var(--p-light-bg);
   --color-surface: var(--p-light-surface);
   --color-surface-dim: var(--p-light-surface-dim);
@@ -100,84 +139,9 @@
   --color-nav-active: var(--p-light-text);
   --color-nav-inactive: var(--p-light-muted);
 
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
-/* ─── Dark (system preference) ─── */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --color-canvas: var(--p-base);
-    --color-surface: var(--p-surface);
-    --color-surface-dim: var(--p-elevated);
-    --color-border: var(--p-border-dark);
-    --color-text: var(--p-text);
-    --color-text-secondary: var(--p-muted);
-    --color-text-tertiary: #9496A8;
-    --color-complete: var(--p-accent);
-    --color-complete-bg: rgba(142, 155, 196, 0.14);
-    --color-accent: var(--p-accent);
-
-    --color-habit-red-bg: rgba(159, 47, 45, 0.18);
-    --color-habit-red-text: #E06050;
-    --color-habit-blue-bg: rgba(83, 155, 245, 0.14);
-    --color-habit-blue-text: #6CB6FF;
-    --color-habit-green-bg: rgba(87, 171, 90, 0.14);
-    --color-habit-green-text: #7EE787;
-    --color-habit-yellow-bg: rgba(198, 144, 38, 0.14);
-    --color-habit-yellow-text: #E8C56A;
-    --color-habit-purple-bg: rgba(152, 110, 226, 0.14);
-    --color-habit-purple-text: #B392F0;
-    --color-habit-orange-bg: rgba(204, 107, 44, 0.14);
-    --color-habit-orange-text: #E0915A;
-
-    --color-heat-0: transparent;
-    --color-heat-1: rgba(142, 155, 196, 0.14);
-    --color-heat-2: rgba(142, 155, 196, 0.30);
-    --color-heat-3: rgba(142, 155, 196, 0.52);
-    --color-heat-4: rgba(142, 155, 196, 0.78);
-
-    --color-nav-bg: rgba(18, 18, 28, 0.92);
-    --color-nav-active: var(--p-text);
-    --color-nav-inactive: var(--p-muted);
-  }
-}
-
-/* ─── Dark (manual toggle) ─── */
-:root[data-theme="dark"] {
-  --color-canvas: var(--p-base);
-  --color-surface: var(--p-surface);
-  --color-surface-dim: var(--p-elevated);
-  --color-border: var(--p-border-dark);
-  --color-text: var(--p-text);
-  --color-text-secondary: var(--p-muted);
-  --color-text-tertiary: #9496A8;
-  --color-complete: var(--p-accent);
-  --color-complete-bg: rgba(142, 155, 196, 0.14);
-  --color-accent: var(--p-accent);
-
-  --color-habit-red-bg: rgba(159, 47, 45, 0.18);
-  --color-habit-red-text: #E06050;
-  --color-habit-blue-bg: rgba(83, 155, 245, 0.14);
-  --color-habit-blue-text: #6CB6FF;
-  --color-habit-green-bg: rgba(87, 171, 90, 0.14);
-  --color-habit-green-text: #7EE787;
-  --color-habit-yellow-bg: rgba(198, 144, 38, 0.14);
-  --color-habit-yellow-text: #E8C56A;
-  --color-habit-purple-bg: rgba(152, 110, 226, 0.14);
-  --color-habit-purple-text: #B392F0;
-  --color-habit-orange-bg: rgba(204, 107, 44, 0.14);
-  --color-habit-orange-text: #E0915A;
-
-  --color-heat-0: transparent;
-  --color-heat-1: rgba(142, 155, 196, 0.14);
-  --color-heat-2: rgba(142, 155, 196, 0.30);
-  --color-heat-3: rgba(142, 155, 196, 0.52);
-  --color-heat-4: rgba(142, 155, 196, 0.78);
-
-  --color-nav-bg: rgba(18, 18, 28, 0.92);
-  --color-nav-active: var(--p-text);
-  --color-nav-inactive: var(--p-muted);
-}
 
 /* ─── Base ─── */
 * {
