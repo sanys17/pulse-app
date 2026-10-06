@@ -60,7 +60,7 @@ function AppContent() {
           width: "100%",
           maxWidth: 430,
           margin: "0 auto",
-          minHeight: "100dvh",
+          minHeight: "100%",
           padding: "calc(env(safe-area-inset-top, 0px) + var(--space-6)) var(--space-4)",
           paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))",
         }}
