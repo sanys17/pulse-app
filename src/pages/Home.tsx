@@ -57,24 +57,6 @@ function PulseScoreArc({ score }: { score: number }) {
     }}>
       <div style={{
         position: "absolute",
-        width: 302,
-        height: 302,
-        top: -150,
-        left: "50%",
-        transform: "translateX(-50%)",
-        pointerEvents: "none",
-      }}>
-        <div style={{ position: "absolute", inset: "-32.95%" }}>
-          <img
-            alt=""
-            src="/assets/glow-ellipse.svg"
-            style={{ display: "block", width: "100%", height: "100%", maxWidth: "none" }}
-          />
-        </div>
-      </div>
-
-      <div style={{
-        position: "absolute",
         top: 10,
         left: "50%",
         transform: "translateX(-50%)",
@@ -273,6 +255,26 @@ export function Home(_props: HomeProps) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, overflow: "visible", position: "relative" }}>
+      {/* Fixed glow — stays locked behind content */}
+      <div style={{
+        position: "fixed",
+        top: -100,
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: 302,
+        height: 302,
+        pointerEvents: "none",
+        zIndex: 0,
+      }}>
+        <div style={{ position: "absolute", inset: "-32.95%" }}>
+          <img
+            alt=""
+            src="/assets/glow-ellipse.svg"
+            style={{ display: "block", width: "100%", height: "100%", maxWidth: "none" }}
+          />
+        </div>
+      </div>
+
       {/* Profile avatar — Figma: 32×32 circle, border 1px #8E9BC4, top-right */}
       <div
         onClick={() => navigate("/settings")}
@@ -297,6 +299,16 @@ export function Home(_props: HomeProps) {
       </div>
 
       <PulseScoreArc score={progressPercent} />
+
+      {/* Opaque backdrop — covers the fixed glow as user scrolls down */}
+      <div style={{
+        background: "var(--color-canvas)",
+        margin: "0 -16px",
+        padding: "0 16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+      }}>
 
       <DateStrip
         days={dateStrip}
@@ -603,6 +615,8 @@ export function Home(_props: HomeProps) {
           )}
         </section>
       )}
+
+      </div>{/* end opaque backdrop */}
     </div>
   );
 }

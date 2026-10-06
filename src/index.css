@@ -151,28 +151,22 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html, body {
-  height: 100%;
-  overflow: hidden;
-  background: var(--color-canvas);
-}
-
 html {
   font-family: "Geist", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont,
     "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
   font-size: var(--text-base);
   line-height: 1.5;
   color: var(--color-text);
+  background: var(--color-canvas);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
-#root {
-  height: 100%;
-  overflow-y: auto;
+body {
+  min-height: 100dvh;
+  background: var(--color-canvas);
   overflow-x: hidden;
-  overscroll-behavior-y: none;
-  -webkit-overflow-scrolling: touch;
 }
 
 ::selection {
