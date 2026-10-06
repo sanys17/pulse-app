@@ -54,7 +54,7 @@ export function useGoogleCalendar(): UseGoogleCalendarReturn {
   });
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
-  const clientRef = useRef<ReturnType<typeof window.google.accounts.oauth2.initTokenClient> | null>(null);
+  const clientRef = useRef<{ requestAccessToken: (opts?: { prompt?: string }) => void } | null>(null);
 
   const fetchEvents = useCallback(async (accessToken: string) => {
     setLoading(true);
