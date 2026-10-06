@@ -338,8 +338,10 @@ export function Home(_props: HomeProps) {
           {vitals.recovery && (
             <div style={{
               display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 100,
-              border: "1px solid rgba(255,255,255,0.06)",
+              padding: "6px 12px", background: "rgba(98,104,128,0.18)", borderRadius: 100,
+              backdropFilter: "saturate(180%) blur(20px)",
+              WebkitBackdropFilter: "saturate(180%) blur(20px)",
+              border: "1px solid rgba(234,236,244,0.08)",
             }}>
               <Lightning size={14} weight="fill" color="white" />
               <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
@@ -350,8 +352,10 @@ export function Home(_props: HomeProps) {
           {vitals.sleep && (
             <div style={{
               display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 100,
-              border: "1px solid rgba(255,255,255,0.06)",
+              padding: "6px 12px", background: "rgba(98,104,128,0.18)", borderRadius: 100,
+              backdropFilter: "saturate(180%) blur(20px)",
+              WebkitBackdropFilter: "saturate(180%) blur(20px)",
+              border: "1px solid rgba(234,236,244,0.08)",
             }}>
               <Moon size={13} weight="fill" color="white" />
               <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
@@ -362,8 +366,10 @@ export function Home(_props: HomeProps) {
           {vitals.steps && (
             <div style={{
               display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 100,
-              border: "1px solid rgba(255,255,255,0.06)",
+              padding: "6px 12px", background: "rgba(98,104,128,0.18)", borderRadius: 100,
+              backdropFilter: "saturate(180%) blur(20px)",
+              WebkitBackdropFilter: "saturate(180%) blur(20px)",
+              border: "1px solid rgba(234,236,244,0.08)",
             }}>
               <Footprints size={14} weight="fill" color="white" />
               <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
@@ -374,8 +380,10 @@ export function Home(_props: HomeProps) {
           {!vitals.steps && vitals.hrv && (
             <div style={{
               display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 100,
-              border: "1px solid rgba(255,255,255,0.06)",
+              padding: "6px 12px", background: "rgba(98,104,128,0.18)", borderRadius: 100,
+              backdropFilter: "saturate(180%) blur(20px)",
+              WebkitBackdropFilter: "saturate(180%) blur(20px)",
+              border: "1px solid rgba(234,236,244,0.08)",
             }}>
               <Footprints size={14} weight="fill" color="white" />
               <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
@@ -395,10 +403,12 @@ export function Home(_props: HomeProps) {
           Next Up
         </h2>
         <div style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          borderRadius: 16,
-          padding: "14px 16px",
+          background: "rgba(98,104,128,0.18)",
+          backdropFilter: "saturate(180%) blur(20px)",
+          WebkitBackdropFilter: "saturate(180%) blur(20px)",
+          border: "1px solid rgba(234,236,244,0.08)",
+          borderRadius: 20,
+          padding: "16px 15px",
         }}>
           {calendar.connected && calendar.events.length > 0 ? (
             calendar.events.map((event, i) => {
