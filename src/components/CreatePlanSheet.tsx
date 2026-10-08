@@ -175,7 +175,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose }: CreatePlanSheetP
                   <span
                     style={{
                       position: "absolute",
-                      left: 14,
+                      left: "var(--space-3)",
                       top: "50%",
                       transform: "translateY(-50%)",
                       fontSize: 14,
