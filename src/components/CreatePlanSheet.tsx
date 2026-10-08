@@ -154,18 +154,40 @@ export function CreatePlanSheet({ friends, onCreate, onClose }: CreatePlanSheetP
           />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              style={{ ...inputStyle, colorScheme: "dark" }}
-            />
-            <input
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              style={{ ...inputStyle, colorScheme: "dark" }}
-            />
+            {([
+              { type: "date", label: "Date", value: date, set: setDate },
+              { type: "time", label: "Time", value: time, set: setTime },
+            ] as const).map((f) => (
+              <div key={f.type} style={{ position: "relative" }}>
+                <input
+                  type={f.type}
+                  value={f.value}
+                  onChange={(e) => f.set(e.target.value)}
+                  aria-label={f.label}
+                  style={{
+                    ...inputStyle,
+                    width: "100%",
+                    colorScheme: "dark",
+                    color: f.value ? "var(--color-text)" : "transparent",
+                  }}
+                />
+                {!f.value && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      left: "var(--space-3)",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      fontSize: 14,
+                      color: "var(--color-text-secondary)",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    {f.label} (optional)
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
 
           <input
