@@ -8,13 +8,14 @@ export interface Habit {
 }
 
 export interface Completion {
+  id?: string;
   habitId: string;
   date: string;
 }
 
 export type HabitColor = "red" | "blue" | "green" | "yellow" | "purple" | "orange";
 
-export type Theme = "light" | "dark" | "system";
+export type Theme = "dark";
 
 export const HABIT_COLORS: Record<
   HabitColor,

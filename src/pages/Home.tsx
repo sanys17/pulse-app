@@ -2,11 +2,29 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lightning, Moon, Footprints, Check, CalendarBlank } from "@phosphor-icons/react";
 import { useHabitsContext } from "../context/HabitsContext";
+import { useTasksContext } from "../context/TasksContext";
+import { useCalendarEventsContext } from "../context/CalendarEventsContext";
 import { useUltrahuman } from "../hooks/useUltrahuman";
 import { useGoogleCalendar, formatRelativeTime } from "../hooks/useGoogleCalendar";
 import { HabitIcon } from "../components/HabitIcon";
 import { HABIT_COLORS } from "../types";
 import type { Habit } from "../types";
+
+function formatLocalEventRelativeTime(date: string, time: string): string {
+  if (!time) return "";
+  const eventDate = new Date(`${date}T${time}`);
+  const now = new Date();
+  const diffMs = eventDate.getTime() - now.getTime();
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin < -60) return "";
+  if (diffMin < 0) return `${Math.abs(diffMin)} min ago`;
+  if (diffMin === 0) return "now";
+  if (diffMin < 60) return `in ${diffMin} min`;
+  const hours = Math.floor(diffMin / 60);
+  const mins = diffMin % 60;
+  if (mins === 0) return `in ${hours}h`;
+  return `in ${hours}h ${mins}m`;
+}
 
 interface HomeProps {
   onEditHabit: (habit: Habit) => void;
@@ -231,25 +249,13 @@ export function Home(_props: HomeProps) {
     [dayHabits, isCompleted, selectedDate],
   );
 
-  const [tasks, setTasks] = useState(() => {
-    try {
-      const saved = localStorage.getItem("pulse-tasks");
-      if (saved) return JSON.parse(saved) as { id: string; label: string; done: boolean }[];
-    } catch { /* ignore */ }
-    return [
-      { id: "t1", label: "Review App Design", done: false },
-      { id: "t2", label: "Call Marc", done: false },
-      { id: "t3", label: "Schedule a Meeting", done: false },
-    ];
-  });
+  const { events: allCalendarEvents } = useCalendarEventsContext();
+  const selectedLocalEvents = useMemo(
+    () => allCalendarEvents.filter((e) => e.date === selectedDate),
+    [allCalendarEvents, selectedDate],
+  );
 
-  useEffect(() => {
-    try { localStorage.setItem("pulse-tasks", JSON.stringify(tasks)); } catch { /* ignore */ }
-  }, [tasks]);
-
-  const toggleTask = (id: string) => {
-    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, done: !t.done } : t));
-  };
+  const { tasks, toggleTask } = useTasksContext();
 
   const geist = "Geist, Inter, system-ui, sans-serif";
 
@@ -415,96 +421,139 @@ export function Home(_props: HomeProps) {
           borderRadius: 20,
           padding: "16px 15px",
         }}>
-          {calendar.connected && calendar.events.length > 0 ? (
-            calendar.events.map((event, i) => {
+          {(() => {
+            const gcalItems = calendar.connected ? calendar.events.map((event) => {
               const startStr = event.start.dateTime || event.start.date || "";
+              const isAllDay = !!event.start.date && !event.start.dateTime;
+              const timeLabel = !isAllDay && event.start.dateTime
+                ? new Date(event.start.dateTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+                : "";
               return (
-                <div key={event.id}>
+                <div key={`gcal-${event.id}`} style={{
+                  display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+                  padding: "5px 0",
+                }}>
+                  <div>
+                    <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "white" }}>
+                      {event.summary || "No title"}
+                    </span>
+                    {timeLabel && (
+                      <div style={{ fontFamily: geist, fontWeight: 400, fontSize: 14, color: "rgba(234,236,244,0.45)", marginTop: 2 }}>
+                        {timeLabel}
+                      </div>
+                    )}
+                  </div>
+                  <span style={{ fontFamily: geist, fontWeight: 300, fontSize: 14, color: "rgba(234,236,244,0.5)", flexShrink: 0, marginLeft: 12 }}>
+                    {startStr ? formatRelativeTime(startStr) : ""}
+                  </span>
+                </div>
+              );
+            }) : [];
+
+            const localItems = selectedLocalEvents.map((event) => {
+              const relTime = formatLocalEventRelativeTime(event.date, event.time);
+              const timeLabel = event.time
+                ? new Date(`2000-01-01T${event.time}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+                : "";
+              return (
+                <div key={`local-${event.id}`} style={{
+                  display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+                  padding: "5px 0",
+                }}>
+                  <div>
+                    <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "white" }}>
+                      {event.title}
+                    </span>
+                    {timeLabel && (
+                      <div style={{ fontFamily: geist, fontWeight: 400, fontSize: 14, color: "rgba(234,236,244,0.45)", marginTop: 2 }}>
+                        {timeLabel}
+                      </div>
+                    )}
+                  </div>
+                  {relTime && (
+                    <span style={{ fontFamily: geist, fontWeight: 300, fontSize: 14, color: "rgba(234,236,244,0.5)", flexShrink: 0, marginLeft: 12 }}>
+                      {relTime}
+                    </span>
+                  )}
+                </div>
+              );
+            });
+
+            const habitItems = nextHabits.map((habit) => (
+              <div key={`habit-${habit.id}`}
+                onClick={() => toggleCompletion(habit.id, selectedDate)}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  cursor: "pointer", padding: "5px 0",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <HabitIcon name={habit.icon} size={15} color="white" />
+                  <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "white" }}>
+                    {habit.name}
+                  </span>
+                </div>
+                <span style={{ fontFamily: geist, fontWeight: 300, fontSize: 14, color: "white" }}>
+                  {getStreak(habit.id) > 0 ? `${getStreak(habit.id)} day streak` : habit.frequency}
+                </span>
+              </div>
+            ));
+
+            const allItems = [...gcalItems, ...localItems, ...habitItems];
+
+            if (allItems.length > 0) {
+              return allItems.map((item, i) => (
+                <div key={item.key}>
                   {i > 0 && (
                     <div style={{ height: 1, background: "rgba(234,236,244,0.08)", margin: "10px 0" }} />
                   )}
-                  <div style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "5px 0",
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <CalendarBlank size={15} weight="regular" color="white" />
-                      <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "white" }}>
-                        {event.summary || "No title"}
-                      </span>
-                    </div>
-                    <span style={{ fontFamily: geist, fontWeight: 300, fontSize: 14, color: "white" }}>
-                      {startStr ? formatRelativeTime(startStr) : ""}
-                    </span>
-                  </div>
+                  {item}
                 </div>
-              );
-            })
-          ) : calendar.connected && !calendar.loading ? (
-            <p style={{
-              fontFamily: geist, fontWeight: 500, fontSize: 16,
-              color: "rgba(234,236,244,0.5)", textAlign: "center", margin: 0, padding: "8px 0",
-            }}>
-              No upcoming events
-            </p>
-          ) : calendar.available && !calendar.connected ? (
-            <div
-              onClick={calendar.connect}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                gap: 8, cursor: "pointer", padding: "8px 0",
-              }}
-            >
-              <CalendarBlank size={16} weight="regular" color="rgba(142,155,196,0.8)" />
-              <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "rgba(142,155,196,0.8)" }}>
-                Connect Calendar
-              </span>
-            </div>
-          ) : nextHabits.length > 0 ? (
-            nextHabits.map((habit, i) => (
-              <div key={habit.id}>
-                {i > 0 && (
-                  <div style={{ height: 1, background: "rgba(234,236,244,0.08)", margin: "10px 0" }} />
-                )}
+              ));
+            }
+
+            if (calendar.available && !calendar.connected) {
+              return (
                 <div
-                  onClick={() => toggleCompletion(habit.id, selectedDate)}
+                  onClick={calendar.connect}
                   style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    cursor: "pointer", padding: "5px 0",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    gap: 8, cursor: "pointer", padding: "8px 0",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <HabitIcon name={habit.icon} size={15} color="white" />
-                    <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "white" }}>
-                      {habit.name}
-                    </span>
-                  </div>
-                  <span style={{ fontFamily: geist, fontWeight: 300, fontSize: 14, color: "white" }}>
-                    {getStreak(habit.id) > 0 ? `${getStreak(habit.id)} day streak` : habit.frequency}
+                  <CalendarBlank size={16} weight="regular" color="rgba(142,155,196,0.8)" />
+                  <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "rgba(142,155,196,0.8)" }}>
+                    Connect Calendar
                   </span>
                 </div>
+              );
+            }
+
+            if (habits.length > 0) {
+              return (
+                <p style={{
+                  fontFamily: geist, fontWeight: 500, fontSize: 16,
+                  color: "rgba(234,236,244,0.5)", textAlign: "center", margin: 0, padding: "8px 0",
+                }}>
+                  All done for today
+                </p>
+              );
+            }
+
+            return (
+              <div
+                onClick={() => navigate("/habits")}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", padding: "8px 0",
+                }}
+              >
+                <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "rgba(234,236,244,0.5)" }}>
+                  Add your first habit
+                </span>
               </div>
-            ))
-          ) : habits.length > 0 ? (
-            <p style={{
-              fontFamily: geist, fontWeight: 500, fontSize: 16,
-              color: "rgba(234,236,244,0.5)", textAlign: "center", margin: 0, padding: "8px 0",
-            }}>
-              All done for today
-            </p>
-          ) : (
-            <div
-              onClick={() => navigate("/habits")}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", padding: "8px 0",
-              }}
-            >
-              <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "rgba(234,236,244,0.5)" }}>
-                Add your first habit
-              </span>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </section>
 
@@ -638,15 +687,16 @@ function DateStrip({
   completedDates: Set<string>;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const todayRef = useRef<HTMLButtonElement>(null);
+  const selectedRef = useRef<HTMLButtonElement>(null);
   const dragState = useRef({ isDown: false, startX: 0, scrollLeft: 0, moved: false });
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
-    const container = scrollRef.current;
-    const el = todayRef.current;
-    if (!container || !el) return;
-    container.scrollLeft = el.offsetLeft - container.offsetWidth / 2 + el.offsetWidth / 2;
-  }, []);
+    const el = selectedRef.current;
+    if (!el) return;
+    el.scrollIntoView({ inline: "center", block: "nearest", behavior: isFirstRender.current ? "instant" : "smooth" });
+    isFirstRender.current = false;
+  }, [selectedDate]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     const el = scrollRef.current;
@@ -698,7 +748,7 @@ function DateStrip({
         return (
           <button
             key={day.dateKey}
-            ref={day.isToday ? todayRef : undefined}
+            ref={isSelected ? selectedRef : undefined}
             onClick={() => handleClick(day.dateKey)}
             style={{
               height: 40,
@@ -707,10 +757,12 @@ function DateStrip({
               borderRadius: 9999,
               border: isDayCompleted ? "none" : "1px solid rgba(255,255,255,0.10)",
               background: isSelected
-                ? "radial-gradient(circle at 25% 20%, rgba(255,255,255,0.10) 0%, transparent 55%), rgba(18,18,28,0.84)"
+                ? day.isToday
+                  ? "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.18) 0%, transparent 50%), rgba(255,255,255,0.06)"
+                  : "radial-gradient(circle at 25% 20%, rgba(255,255,255,0.10) 0%, transparent 55%), rgba(18,18,28,0.84)"
                 : isDayCompleted
                   ? "#FFFFFF"
-                  : "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12) 0%, transparent 50%)",
+                  : "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.03) 0%, transparent 50%), rgba(0,0,0,0.4)",
               backdropFilter: isDayCompleted ? "none" : isSelected ? "blur(15px) saturate(120%)" : "blur(4px) saturate(120%)",
               WebkitBackdropFilter: isDayCompleted ? "none" : isSelected ? "blur(15px) saturate(120%)" : "blur(4px) saturate(120%)",
               color: isSelected
