@@ -34,8 +34,8 @@ Until those are done the app throws on startup ("Missing VITE_SUPABASE_URL...").
 - `toggleTask` assigns `newDone` inside a `setTasks` updater (works, fragile)
 - `toggleCompletion` in `useHabits.ts` has the same pattern (`exists` set inside the updater); worth hardening with a ref
 
-## Uncommitted changes NOT part of this branch
-`src/components/BottomNav.tsx` and `src/hooks/useTheme.ts` have unrelated local modifications from earlier work. They are not committed, so a cloud session will not see them. Ask the user before touching or discarding them.
+## Unrelated UI changes (committed separately)
+Commit `d873b29` restyles `src/components/BottomNav.tsx` (dark glass pill, 44px targets) and reduces `src/hooks/useTheme.ts` to always apply the dark theme (light/system options removed; the hook no longer returns `theme`/`resolved`/`setTheme`). These are not part of the Supabase work.
 
 ## Next: Sub-project 2, push notifications (not started)
 Goal: reliable Web Push that works with the app closed and the phone locked. Three triggers: calendar event reminders, habit reminders, morning summary.
