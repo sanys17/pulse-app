@@ -36,3 +36,64 @@ export const HABIT_ICONS = [
 ] as const;
 
 export type HabitIcon = (typeof HABIT_ICONS)[number];
+
+export interface Friend {
+  friendshipId: string;
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  username: string;
+}
+
+export interface FriendRequest {
+  friendshipId: string;
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  username: string;
+  createdAt: string;
+}
+
+export interface FeedEntry {
+  id: string;
+  userId: string;
+  type: "streak_milestone" | "habit_started" | "daily_complete" | "plan_created";
+  payload: Record<string, unknown>;
+  createdAt: string;
+  userName: string;
+  userAvatar: string | null;
+}
+
+export interface SharedPlan {
+  id: string;
+  creatorId: string;
+  title: string;
+  description: string | null;
+  date: string | null;
+  time: string | null;
+  location: string | null;
+  status: "planning" | "confirmed" | "completed" | "cancelled";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlanMember {
+  id: string;
+  planId: string;
+  userId: string;
+  rsvp: "pending" | "going" | "maybe" | "declined";
+  joinedAt: string;
+  name: string;
+  avatarUrl: string | null;
+  username: string;
+}
+
+export interface ChecklistItem {
+  id: string;
+  planId: string;
+  label: string;
+  done: boolean;
+  assignedTo: string | null;
+  createdBy: string;
+  createdAt: string;
+}
