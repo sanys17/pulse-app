@@ -19,9 +19,10 @@ const navTabs = [
 interface BottomNavProps {
   onAddHabit?: () => void;
   onQuickLog?: () => void;
+  pendingRequests?: number;
 }
 
-export function BottomNav({ onAddHabit, onQuickLog }: BottomNavProps) {
+export function BottomNav({ onAddHabit, onQuickLog, pendingRequests = 0 }: BottomNavProps) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
@@ -176,7 +177,32 @@ export function BottomNav({ onAddHabit, onQuickLog }: BottomNavProps) {
             })}
           >
             {({ isActive }) => (
-              <Icon size={24} weight={isActive ? "fill" : "regular"} aria-hidden="true" />
+              <div style={{ position: "relative" }}>
+                <Icon size={24} weight={isActive ? "fill" : "regular"} aria-hidden="true" />
+                {to === "/social" && pendingRequests > 0 && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: -4,
+                      right: -6,
+                      width: 16,
+                      height: 16,
+                      borderRadius: "50%",
+                      background: "#E5534B",
+                      border: "2px solid rgba(20, 20, 30, 0.9)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 9,
+                      fontWeight: 700,
+                      color: "#fff",
+                      lineHeight: 1,
+                    }}
+                  >
+                    {pendingRequests > 9 ? "9+" : pendingRequests}
+                  </div>
+                )}
+              </div>
             )}
           </NavLink>
         ))}
