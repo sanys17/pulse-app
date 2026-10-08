@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import { BottomNav } from "./components/BottomNav";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import { HabitsProvider, useHabitsContext } from "./context/HabitsContext";
 import { HabitForm } from "./components/HabitForm";
 import { QuickLog } from "./components/QuickLog";
@@ -11,10 +12,31 @@ import { Social } from "./pages/Social";
 import { Calendar } from "./pages/Calendar";
 import { Tasks } from "./pages/Tasks";
 import { Settings } from "./pages/Settings";
+import { SignIn } from "./pages/SignIn";
 import type { Habit, HabitColor } from "./types";
 
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        minHeight: "100dvh", color: "rgba(234,236,244,0.4)",
+        fontFamily: "Geist, Inter, system-ui, sans-serif",
+      }}>
+        Loading...
+      </div>
+    );
+  }
+
+  if (!user) return <SignIn />;
+
+  return <>{children}</>;
+}
+
 function AppContent() {
-  const { theme, setTheme } = useTheme();
+  useTheme();
   const { addHabit, updateHabit, deleteHabit } = useHabitsContext();
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [showNewHabit, setShowNewHabit] = useState(false);
@@ -71,10 +93,7 @@ function AppContent() {
           <Route path="/habits" element={<Habits />} />
           <Route path="/social" element={<Social />} />
           <Route path="/tasks" element={<Tasks />} />
-          <Route
-            path="/settings"
-            element={<Settings theme={theme} onThemeChange={setTheme} />}
-          />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </div>
 
@@ -108,8 +127,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <HabitsProvider>
-      <AppContent />
-    </HabitsProvider>
+    <AuthProvider>
+      <AuthGate>
+        <HabitsProvider>
+          <AppContent />
+        </HabitsProvider>
+      </AuthGate>
+    </AuthProvider>
   );
 }
