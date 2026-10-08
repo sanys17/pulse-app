@@ -3,6 +3,8 @@ import { Routes, Route } from "react-router-dom";
 import { BottomNav } from "./components/BottomNav";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { HabitsProvider, useHabitsContext } from "./context/HabitsContext";
+import { TasksProvider } from "./context/TasksContext";
+import { CalendarEventsProvider } from "./context/CalendarEventsContext";
 import { HabitForm } from "./components/HabitForm";
 import { QuickLog } from "./components/QuickLog";
 import { useTheme } from "./hooks/useTheme";
@@ -130,7 +132,11 @@ export default function App() {
     <AuthProvider>
       <AuthGate>
         <HabitsProvider>
-          <AppContent />
+          <TasksProvider>
+            <CalendarEventsProvider>
+              <AppContent />
+            </CalendarEventsProvider>
+          </TasksProvider>
         </HabitsProvider>
       </AuthGate>
     </AuthProvider>
