@@ -41,8 +41,9 @@ export function Habits() {
       updateHabit(editingHabit.id, data);
       setSavedId(editingHabit.id);
     } else {
-      const habit = addHabit(data);
-      setSavedId(habit.id);
+      addHabit(data).then((habit) => {
+        if (habit) setSavedId(habit.id);
+      });
     }
     setShowForm(false);
     setEditingHabit(undefined);
