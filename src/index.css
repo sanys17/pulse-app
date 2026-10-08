@@ -182,6 +182,14 @@ button {
   color: inherit;
 }
 
+@media (hover: none) and (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 button {
   cursor: pointer;
   border: none;
