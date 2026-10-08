@@ -5,7 +5,7 @@ Pulse is a mobile-first personal health/habit tracker PWA with a dark glass UI.
 Stack: React 19, TypeScript 6, Vite 8, React Router 7, Supabase (Postgres + Auth + RLS), Phosphor Icons, Geist font, vite-plugin-pwa. Target hosting: Vercel.
 
 ## State of the work
-Branch `feat/supabase-backend` (7 commits ahead of `master`) is **Sub-project 1: backend, auth, data migration. It is code-complete**, and `npx tsc --noEmit` passes. There is no test runner; type-check was the only verification, and nothing has been run against a real Supabase project yet.
+Branch `feat/supabase-backend` (7 commits ahead of `master`) is **Sub-project 1: backend, auth, data migration. It is code-complete**, and `npm run build` passes. There is no test runner, and nothing has been run against a real Supabase project yet.
 
 What was built:
 - `src/lib/supabase.ts`, `src/lib/database.types.ts`, `supabase/migrations/001_initial_schema.sql` (tables: profiles, habits, completions, tasks, calendar_events; RLS on all; `handle_new_user` trigger; unique `(user_id, habit_id, date)` on completions)
@@ -26,7 +26,6 @@ Plan: `docs/superpowers/plans/2026-10-08-backend-auth-data.md`
 Until those are done the app throws on startup ("Missing VITE_SUPABASE_URL...").
 
 ## Known deferred issues (minor, from the final review)
-- `database.types.ts` lacks `Views`/`Functions`/`Enums` keys (compiles fine; add if Supabase typing misbehaves)
 - Data hooks ignore `{ error }` on fetch; an expired token silently shows an empty state
 - Update/delete mutations filter by `id` only, not `user_id` (RLS covers it)
 - Profile name writes to Supabase on every keystroke; should debounce or save on blur
@@ -47,4 +46,4 @@ Process used so far: brainstorm, then write a spec to `docs/superpowers/specs/`,
 - Apple-style: 44x44pt touch targets, spring animations, respond on pointer-down.
 - Avoid `crypto.randomUUID()` (the user tests over LAN HTTP on a phone; it is unavailable there). Use `Date.now().toString(36) + Math.random().toString(36).slice(2, 7)` for temp IDs.
 - Git: work on a branch, do not push or merge without asking the user. Commit messages are `feat:`/`fix:` style.
-- Verify with `npx tsc --noEmit`.
+- Verify with `npx tsc -b` or `npm run build`. Do NOT use `npx tsc --noEmit`: the root tsconfig has `"files": []` with project references, so it checks nothing and always passes.

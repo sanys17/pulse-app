@@ -1,4 +1,4 @@
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       profiles: {
@@ -19,6 +19,7 @@ export interface Database {
           name?: string | null;
           avatar_url?: string | null;
         };
+        Relationships: [];
       };
       habits: {
         Row: {
@@ -44,6 +45,7 @@ export interface Database {
           color?: string;
           frequency?: string;
         };
+        Relationships: [];
       };
       completions: {
         Row: {
@@ -58,7 +60,11 @@ export interface Database {
           habit_id: string;
           date: string;
         };
-        Update: never;
+        Update: {
+          habit_id?: string;
+          date?: string;
+        };
+        Relationships: [];
       };
       tasks: {
         Row: {
@@ -78,6 +84,7 @@ export interface Database {
           label?: string;
           done?: boolean;
         };
+        Relationships: [];
       };
       calendar_events: {
         Row: {
@@ -103,7 +110,12 @@ export interface Database {
           time?: string | null;
           location?: string | null;
         };
+        Relationships: [];
       };
     };
+    Views: { [_ in never]: never };
+    Functions: { [_ in never]: never };
+    Enums: { [_ in never]: never };
+    CompositeTypes: { [_ in never]: never };
   };
 }

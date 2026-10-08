@@ -99,7 +99,7 @@ export function useHabits() {
     async (id: string, data: Partial<Omit<Habit, "id" | "createdAt">>) => {
       setHabits((prev) => prev.map((h) => (h.id === id ? { ...h, ...data } : h)));
 
-      const updateData: Record<string, string> = {};
+      const updateData: { name?: string; icon?: string; color?: string; frequency?: string } = {};
       if (data.name !== undefined) updateData.name = data.name;
       if (data.icon !== undefined) updateData.icon = data.icon;
       if (data.color !== undefined) updateData.color = data.color;
