@@ -59,7 +59,7 @@ export function useCalendarEvents() {
     const optimistic: CalendarEvent = { id: tempId, ...data };
     setEvents((prev) => [...prev, optimistic]);
 
-    const { data: inserted } = await supabase
+    const { data: inserted, error } = await supabase
       .from("calendar_events")
       .insert({
         user_id: user.id,
@@ -73,6 +73,8 @@ export function useCalendarEvents() {
 
     if (inserted) {
       setEvents((prev) => prev.map((e) => e.id === tempId ? { ...e, id: inserted.id } : e));
+    } else if (error) {
+      setEvents((prev) => prev.filter((e) => e.id !== tempId));
     }
   }, [user]);
 

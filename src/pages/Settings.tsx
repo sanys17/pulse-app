@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
 import {
-  User,
   GoogleChromeLogo,
   Heart,
   Trash,
@@ -41,10 +40,10 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function Settings() {
-  const { habits, completions, bestStreak, todaysProgress } = useHabitsContext();
+  const { habits, bestStreak, todaysProgress } = useHabitsContext();
   const gcal = useGoogleCalendar();
   const profile = useProfile();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const [name, setName] = useState("");
   const [showReset, setShowReset] = useState(false);
 
@@ -56,15 +55,16 @@ export function Settings() {
   }, [profile.updateName]);
 
   const handleReset = useCallback(async () => {
+    if (!user) return;
     await Promise.all([
-      supabase.from("habits").delete().neq("id", ""),
-      supabase.from("tasks").delete().neq("id", ""),
-      supabase.from("calendar_events").delete().neq("id", ""),
-      supabase.from("completions").delete().neq("id", ""),
+      supabase.from("completions").delete().eq("user_id", user.id),
+      supabase.from("habits").delete().eq("user_id", user.id),
+      supabase.from("tasks").delete().eq("user_id", user.id),
+      supabase.from("calendar_events").delete().eq("user_id", user.id),
     ]);
     setShowReset(false);
     window.location.reload();
-  }, []);
+  }, [user]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>

@@ -123,14 +123,16 @@ export function useHabits() {
     async (habitId: string, date: string = toDateKey()) => {
       if (!user) return;
 
-      const exists = completions.some(
-        (c) => c.habitId === habitId && c.date === date
-      );
+      let exists = false;
+      setCompletions((prev) => {
+        exists = prev.some((c) => c.habitId === habitId && c.date === date);
+        if (exists) {
+          return prev.filter((c) => !(c.habitId === habitId && c.date === date));
+        }
+        return [...prev, { habitId, date } as Completion];
+      });
 
       if (exists) {
-        setCompletions((prev) =>
-          prev.filter((c) => !(c.habitId === habitId && c.date === date))
-        );
         await supabase
           .from("completions")
           .delete()
@@ -138,9 +140,6 @@ export function useHabits() {
           .eq("habit_id", habitId)
           .eq("date", date);
       } else {
-        const tempCompletion: Completion = { habitId, date };
-        setCompletions((prev) => [...prev, tempCompletion]);
-
         const { error } = await supabase
           .from("completions")
           .insert({ user_id: user.id, habit_id: habitId, date });
@@ -152,7 +151,7 @@ export function useHabits() {
         }
       }
     },
-    [user, completions]
+    [user]
   );
 
   const isCompleted = useCallback(

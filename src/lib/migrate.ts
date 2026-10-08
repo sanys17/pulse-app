@@ -3,7 +3,14 @@ import { supabase } from "./supabase";
 
 const MIGRATED_FLAG = "pulse-migrated";
 
-export async function migrateLocalData(user: User): Promise<void> {
+let inFlight: Promise<void> | null = null;
+
+export function migrateLocalData(user: User): Promise<void> {
+  if (!inFlight) inFlight = doMigrate(user).finally(() => { inFlight = null; });
+  return inFlight;
+}
+
+async function doMigrate(user: User): Promise<void> {
   try {
     if (localStorage.getItem(MIGRATED_FLAG) === "true") return;
   } catch {

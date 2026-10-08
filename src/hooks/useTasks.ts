@@ -49,7 +49,7 @@ export function useTasks() {
     const tempId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     setTasks((prev) => [...prev, { id: tempId, label, done: false }]);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("tasks")
       .insert({ user_id: user.id, label })
       .select()
@@ -57,6 +57,8 @@ export function useTasks() {
 
     if (data) {
       setTasks((prev) => prev.map((t) => t.id === tempId ? { ...t, id: data.id } : t));
+    } else if (error) {
+      setTasks((prev) => prev.filter((t) => t.id !== tempId));
     }
   }, [user]);
 

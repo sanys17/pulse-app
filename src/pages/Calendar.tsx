@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { CaretLeft, CaretRight, CheckCircle, Plus } from "@phosphor-icons/react";
 import { useHabitsContext } from "../context/HabitsContext";
 import { useCalendarEventsContext } from "../context/CalendarEventsContext";
