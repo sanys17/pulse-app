@@ -1,96 +1,158 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
 import type { Habit, Completion, HabitColor } from "../types";
-
-const HABITS_KEY = "pulse-habits";
-const COMPLETIONS_KEY = "pulse-completions";
-
-function load<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function save<T>(key: string, data: T) {
-  try {
-    localStorage.setItem(key, JSON.stringify(data));
-  } catch {}
-}
 
 function toDateKey(d: Date = new Date()): string {
   return d.toISOString().slice(0, 10);
 }
 
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
-
 export function useHabits() {
-  const [habits, setHabits] = useState<Habit[]>(() => load(HABITS_KEY, []));
-  const [completions, setCompletions] = useState<Completion[]>(() =>
-    load(COMPLETIONS_KEY, [])
-  );
+  const { user } = useAuth();
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [completions, setCompletions] = useState<Completion[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+
+    async function fetchAll() {
+      const [habitsRes, completionsRes] = await Promise.all([
+        supabase.from("habits").select("*").eq("user_id", user!.id).order("created_at"),
+        supabase.from("completions").select("*").eq("user_id", user!.id),
+      ]);
+
+      if (cancelled) return;
+
+      if (habitsRes.data) {
+        setHabits(habitsRes.data.map((h) => ({
+          id: h.id,
+          name: h.name,
+          icon: h.icon,
+          color: h.color as HabitColor,
+          frequency: h.frequency as "daily" | "weekly",
+          createdAt: h.created_at.slice(0, 10),
+        })));
+      }
+
+      if (completionsRes.data) {
+        setCompletions(completionsRes.data.map((c) => ({
+          id: c.id,
+          habitId: c.habit_id,
+          date: c.date,
+        })));
+      }
+
+      setLoading(false);
+    }
+
+    fetchAll();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") fetchAll();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [user]);
 
   const addHabit = useCallback(
-    (data: { name: string; icon: string; color: HabitColor; frequency: "daily" | "weekly" }) => {
-      const habit: Habit = {
-        id: generateId(),
+    async (data: { name: string; icon: string; color: HabitColor; frequency: "daily" | "weekly" }) => {
+      if (!user) return;
+
+      const tempId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      const optimistic: Habit = {
+        id: tempId,
         ...data,
         createdAt: toDateKey(),
       };
-      setHabits((prev) => {
-        const next = [...prev, habit];
-        save(HABITS_KEY, next);
-        return next;
-      });
-      return habit;
+      setHabits((prev) => [...prev, optimistic]);
+
+      const { data: inserted, error } = await supabase
+        .from("habits")
+        .insert({ user_id: user.id, name: data.name, icon: data.icon, color: data.color, frequency: data.frequency })
+        .select()
+        .single();
+
+      if (inserted) {
+        setHabits((prev) =>
+          prev.map((h) => h.id === tempId
+            ? { ...h, id: inserted.id, createdAt: inserted.created_at.slice(0, 10) }
+            : h
+          )
+        );
+      } else if (error) {
+        setHabits((prev) => prev.filter((h) => h.id !== tempId));
+      }
+
+      return optimistic;
     },
-    []
+    [user]
   );
 
   const updateHabit = useCallback(
-    (id: string, data: Partial<Omit<Habit, "id" | "createdAt">>) => {
-      setHabits((prev) => {
-        const next = prev.map((h) => (h.id === id ? { ...h, ...data } : h));
-        save(HABITS_KEY, next);
-        return next;
-      });
+    async (id: string, data: Partial<Omit<Habit, "id" | "createdAt">>) => {
+      setHabits((prev) => prev.map((h) => (h.id === id ? { ...h, ...data } : h)));
+
+      const updateData: Record<string, string> = {};
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.icon !== undefined) updateData.icon = data.icon;
+      if (data.color !== undefined) updateData.color = data.color;
+      if (data.frequency !== undefined) updateData.frequency = data.frequency;
+
+      await supabase.from("habits").update(updateData).eq("id", id);
     },
     []
   );
 
   const deleteHabit = useCallback(
-    (id: string) => {
-      setHabits((prev) => {
-        const next = prev.filter((h) => h.id !== id);
-        save(HABITS_KEY, next);
-        return next;
-      });
-      setCompletions((prev) => {
-        const next = prev.filter((c) => c.habitId !== id);
-        save(COMPLETIONS_KEY, next);
-        return next;
-      });
+    async (id: string) => {
+      setHabits((prev) => prev.filter((h) => h.id !== id));
+      setCompletions((prev) => prev.filter((c) => c.habitId !== id));
+      await supabase.from("habits").delete().eq("id", id);
     },
     []
   );
 
   const toggleCompletion = useCallback(
-    (habitId: string, date: string = toDateKey()) => {
-      setCompletions((prev) => {
-        const exists = prev.some(
-          (c) => c.habitId === habitId && c.date === date
+    async (habitId: string, date: string = toDateKey()) => {
+      if (!user) return;
+
+      const exists = completions.some(
+        (c) => c.habitId === habitId && c.date === date
+      );
+
+      if (exists) {
+        setCompletions((prev) =>
+          prev.filter((c) => !(c.habitId === habitId && c.date === date))
         );
-        const next = exists
-          ? prev.filter((c) => !(c.habitId === habitId && c.date === date))
-          : [...prev, { habitId, date }];
-        save(COMPLETIONS_KEY, next);
-        return next;
-      });
+        await supabase
+          .from("completions")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("habit_id", habitId)
+          .eq("date", date);
+      } else {
+        const tempCompletion: Completion = { habitId, date };
+        setCompletions((prev) => [...prev, tempCompletion]);
+
+        const { error } = await supabase
+          .from("completions")
+          .insert({ user_id: user.id, habit_id: habitId, date });
+
+        if (error && error.code !== "23505") {
+          setCompletions((prev) =>
+            prev.filter((c) => !(c.habitId === habitId && c.date === date))
+          );
+        }
+      }
     },
-    []
+    [user, completions]
   );
 
   const isCompleted = useCallback(
@@ -249,6 +311,7 @@ export function useHabits() {
   return {
     habits,
     completions,
+    loading,
     addHabit,
     updateHabit,
     deleteHabit,
