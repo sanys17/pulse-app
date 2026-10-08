@@ -9,7 +9,6 @@ import {
   Warning,
 } from "@phosphor-icons/react";
 import { useHabitsContext } from "../context/HabitsContext";
-import { useGoogleCalendar } from "../hooks/useGoogleCalendar";
 import { useProfile } from "../hooks/useProfile";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -41,7 +40,6 @@ const cardStyle: React.CSSProperties = {
 
 export function Settings() {
   const { habits, bestStreak, todaysProgress } = useHabitsContext();
-  const gcal = useGoogleCalendar();
   const profile = useProfile();
   const { user, signOut } = useAuth();
   const [name, setName] = useState("");
@@ -144,16 +142,16 @@ export function Settings() {
           <IntegrationRow
             icon={<GoogleChromeLogo size={20} weight="regular" />}
             label="Google Calendar"
-            connected={gcal.connected}
-            available={gcal.available}
-            onToggle={gcal.connected ? gcal.disconnect : gcal.connect}
+            connected={false}
+            available={false}
+            detail="Coming Soon"
           />
           <IntegrationRow
             icon={<Heart size={20} weight="regular" />}
             label="Ultrahuman"
-            connected={true}
-            available={true}
-            detail="Via API"
+            connected={false}
+            available={false}
+            detail="Coming Soon"
           />
         </div>
       </section>
