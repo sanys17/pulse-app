@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { migrateLocalData } from "../lib/migrate";
 
 interface AuthContextValue {
   user: User | null;
@@ -16,16 +17,29 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [migrating, setMigrating] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        setMigrating(true);
+        await migrateLocalData(currentUser);
+        setMigrating(false);
+      }
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user ?? null);
+      async (_event, session) => {
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        if (currentUser && _event === "SIGNED_IN") {
+          setMigrating(true);
+          await migrateLocalData(currentUser);
+          setMigrating(false);
+        }
       }
     );
 
@@ -54,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signInWithEmail, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, loading: loading || migrating, signInWithGoogle, signInWithEmail, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
