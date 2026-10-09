@@ -5,6 +5,7 @@ import type { Friend } from "../types";
 import { Sheet } from "./Sheet";
 import { Avatar } from "./Avatar";
 import { AlertPicker } from "./AlertPicker";
+import { Toggle } from "./Toggle";
 
 interface CreatePlanSheetProps {
   friends: Friend[];
@@ -15,6 +16,7 @@ interface CreatePlanSheetProps {
     time?: string;
     location?: string;
     alerts?: number[] | null;
+    open?: boolean;
     memberIds: string[];
   }) => Promise<string | undefined>;
   onClose: () => void;
@@ -47,6 +49,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
     setAlerts(builtInAlerts("plan", hasTime));
   }, [hasTime]);
   const [selectedFriends, setSelectedFriends] = useState<Set<string>>(new Set());
+  const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -70,6 +73,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
       time: time || undefined,
       location: location.trim() || undefined,
       alerts: date ? alerts : null,
+      open,
       memberIds: [...selectedFriends],
     });
     setSubmitting(false);
@@ -79,7 +83,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
     }
     onCreated?.(title.trim());
     onClose();
-  }, [title, description, date, time, location, alerts, selectedFriends, submitting, onCreate, onClose, onCreated]);
+  }, [title, description, date, time, location, alerts, open, selectedFriends, submitting, onCreate, onClose, onCreated]);
 
   const canCreate = title.trim().length > 0 && !submitting;
 
@@ -162,6 +166,26 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
         )}
 
         {friends.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "var(--space-3)",
+              minHeight: 52,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Open to all friends</div>
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--color-text-tertiary)" }}>
+                Any friend can join, up to 20 people.
+              </div>
+            </div>
+            <Toggle checked={open} onChange={setOpen} label="Open to all friends" />
+          </div>
+        )}
+
+        {friends.length > 0 && (
           <div>
             <h3
               style={{
@@ -175,7 +199,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
                 alignItems: "center",
               }}
             >
-              Invite friends{selectedFriends.size > 0 ? ` · ${selectedFriends.size}` : ""}
+              {open ? "Also invite directly" : "Invite friends"}{selectedFriends.size > 0 ? ` · ${selectedFriends.size}` : ""}
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
               {friends.map((f) => {

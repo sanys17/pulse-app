@@ -90,6 +90,7 @@ export interface SharedPlan {
   location: string | null;
   status: "planning" | "confirmed" | "completed" | "cancelled";
   alerts: number[] | null; // set by the creator when the plan is made; null = built-in default
+  open: boolean; // any friend of the creator can join
   createdAt: string;
   updatedAt: string;
 }

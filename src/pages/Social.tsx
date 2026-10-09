@@ -11,7 +11,7 @@ import { CreatePlanSheet } from "../components/CreatePlanSheet";
 import { SectionHeader } from "../components/SectionHeader";
 import { ConfirmSheet } from "../components/ConfirmSheet";
 import { Avatar } from "../components/Avatar";
-import { dayLabel, localDateKey } from "../lib/format";
+import { dayLabel, localDateKey, planWhen } from "../lib/format";
 import type { FeedEntry, FriendRequest } from "../types";
 
 function groupByDay(entries: FeedEntry[]): { label: string; items: FeedEntry[] }[] {
@@ -124,6 +124,15 @@ export function Social() {
       });
     },
     [feed, plans.plans, showToast],
+  );
+
+  const handleJoin = useCallback(
+    async (planId: string, title: string) => {
+      const ok = await plans.joinPlan(planId);
+      if (ok) showToast(`You joined "${title}"`);
+      else showToast("Couldn't join the plan. It may be full or no longer open.", true);
+    },
+    [plans, showToast],
   );
 
   const handleConfirmDeletePlan = useCallback(async () => {
@@ -320,6 +329,61 @@ export function Social() {
           </div>
         )}
       </section>
+
+      {/* Open plans from friends */}
+      {plans.openPlans.length > 0 && (
+        <section>
+          <SectionHeader title="Open plans" />
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+            {plans.openPlans.map((op) => {
+              const when = planWhen(op.date, op.time);
+              const whenLine = [when.relative, when.time].filter(Boolean).join(" · ");
+              return (
+                <div
+                  key={op.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--space-3)",
+                    padding: "var(--space-3) var(--space-4)",
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "var(--radius-md)",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {op.title}
+                    </div>
+                    <div style={{ fontSize: "var(--text-xs)", color: "var(--color-text-tertiary)", marginTop: 2 }}>
+                      {op.creatorName}
+                      {whenLine ? ` · ${whenLine}` : ""} · {op.goingCount} going
+                    </div>
+                  </div>
+                  <button
+                    className="press"
+                    onClick={() => handleJoin(op.id, op.title)}
+                    style={{
+                      height: 44,
+                      padding: "0 var(--space-5)",
+                      borderRadius: "var(--radius-sm)",
+                      background: "var(--color-complete-bg)",
+                      border: "none",
+                      color: "var(--color-accent)",
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    Join
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Activity */}
       <section>

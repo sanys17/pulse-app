@@ -9,9 +9,21 @@ export interface PlanWithMembers extends SharedPlan {
   members: PlanMember[];
 }
 
+/** An open plan from a friend that the user has not joined yet. */
+export interface OpenPlan {
+  id: string;
+  title: string;
+  date: string | null;
+  time: string | null;
+  location: string | null;
+  creatorName: string;
+  goingCount: number;
+}
+
 export function useSharedPlans() {
   const { user } = useAuth();
   const [plans, setPlans] = useState<PlanWithMembers[]>([]);
+  const [openPlans, setOpenPlans] = useState<OpenPlan[]>([]);
   const [loading, setLoading] = useState(true);
   // Only the newest fetch may write state; a delete also bumps it so a response
   // that was already in flight cannot bring a deleted plan back.
@@ -26,8 +38,33 @@ export function useSharedPlans() {
       .select("plan_id")
       .eq("user_id", user.id);
 
+    // Friends' open plans I could still join (RLS only shows friends' plans).
+    const joined = new Set((memberRows ?? []).map((m) => m.plan_id));
+    const loadOpen = async () => {
+      const { data: open } = await supabase.from("shared_plans").select("*").eq("open", true).neq("creator_id", user.id);
+      const candidates = (open ?? []).filter((p) => !joined.has(p.id) && p.status !== "cancelled" && p.status !== "completed");
+      if (candidates.length === 0) return [] as OpenPlan[];
+      const [{ data: mems }, { data: profs }] = await Promise.all([
+        supabase.from("plan_members").select("plan_id, rsvp").in("plan_id", candidates.map((p) => p.id)),
+        supabase.from("profiles").select("user_id, name").in("user_id", [...new Set(candidates.map((p) => p.creator_id))]),
+      ]);
+      const names = new Map((profs ?? []).map((p) => [p.user_id, p.name ?? ""]));
+      return candidates.map((p) => ({
+        id: p.id,
+        title: p.title,
+        date: p.date,
+        time: p.time,
+        location: p.location,
+        creatorName: names.get(p.creator_id) || "A friend",
+        goingCount: (mems ?? []).filter((m) => m.plan_id === p.id && m.rsvp === "going").length,
+      }));
+    };
+
     if (seq !== fetchSeq.current) return;
     if (!memberRows || memberRows.length === 0) {
+      const openNow = await loadOpen();
+      if (seq !== fetchSeq.current) return;
+      setOpenPlans(openNow);
       setPlans([]);
       setLoading(false);
       return;
@@ -35,7 +72,8 @@ export function useSharedPlans() {
 
     const planIds = memberRows.map((m) => m.plan_id);
 
-    const [plansRes, allMembersRes] = await Promise.all([
+    const [openNow, plansRes, allMembersRes] = await Promise.all([
+      loadOpen(),
       supabase
         .from("shared_plans")
         .select("*")
@@ -78,6 +116,7 @@ export function useSharedPlans() {
       location: p.location,
       status: p.status as SharedPlan["status"],
       alerts: p.alerts ?? null,
+      open: p.open,
       createdAt: p.created_at,
       updatedAt: p.updated_at,
       members: allMembers
@@ -96,6 +135,7 @@ export function useSharedPlans() {
     }));
 
     setPlans(result);
+    setOpenPlans(openNow);
     setLoading(false);
   }, [user]);
 
@@ -121,6 +161,7 @@ export function useSharedPlans() {
       time?: string;
       location?: string;
       alerts?: number[] | null;
+      open?: boolean;
       memberIds: string[];
     }) => {
       if (!user) return;
@@ -135,6 +176,7 @@ export function useSharedPlans() {
           time: data.time ?? null,
           location: data.location ?? null,
           alerts: data.alerts ?? null,
+          open: data.open ?? false,
         })
         .select()
         .single();
@@ -193,6 +235,22 @@ export function useSharedPlans() {
       return true;
     },
     [user],
+  );
+
+  const joinPlan = useCallback(
+    async (planId: string): Promise<boolean> => {
+      if (!user) return false;
+      const { error } = await supabase
+        .from("plan_members")
+        .insert({ plan_id: planId, user_id: user.id, rsvp: "going" });
+      if (error) {
+        if (error.code !== "42501") reportError(error, { area: "join-plan", target: planId });
+        return false;
+      }
+      await fetchAll();
+      return true;
+    },
+    [user, fetchAll],
   );
 
   // A member (not the creator) removes themselves from a plan.
@@ -307,10 +365,12 @@ export function useSharedPlans() {
 
   return {
     plans,
+    openPlans,
     loading,
     createPlan,
     deletePlan,
     leavePlan,
+    joinPlan,
     updateRsvp,
     updateMyAlerts,
     fetchChecklist,
