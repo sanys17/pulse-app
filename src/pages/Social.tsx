@@ -10,6 +10,7 @@ import {
 import { useSocial } from "../context/SocialContext";
 import { UsernameSetup } from "../components/UsernameSetup";
 import { FriendRequestCard } from "../components/FriendRequestCard";
+import { SentRequestRow } from "../components/SentRequestRow";
 import { FeedCard } from "../components/FeedCard";
 import { PlanCard } from "../components/PlanCard";
 import { FriendsSheet } from "../components/FriendsSheet";
@@ -28,7 +29,8 @@ export function Social() {
   >([]);
   const [searching, setSearching] = useState(false);
   const [addingUser, setAddingUser] = useState<string | null>(null);
-  const [addSuccess, setAddSuccess] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null);
+  const toastTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Handle ?add=username deep link
@@ -39,6 +41,12 @@ export function Social() {
       handleSearch(addUser);
     }
   }, [searchParams, username.username]);
+
+  const showToast = useCallback((text: string, error = false) => {
+    setToast({ text, error });
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+    toastTimeout.current = setTimeout(() => setToast(null), 3000);
+  }, []);
 
   const handleSearch = useCallback(
     async (query: string) => {
@@ -57,7 +65,6 @@ export function Social() {
   const onSearchChange = useCallback(
     (value: string) => {
       setSearchQuery(value);
-      setAddSuccess(null);
       if (searchTimeout.current) clearTimeout(searchTimeout.current);
       searchTimeout.current = setTimeout(() => handleSearch(value), 300);
     },
@@ -70,13 +77,13 @@ export function Social() {
       const result = await friendships.sendRequest(targetUsername);
       setAddingUser(null);
       if (result.error) {
-        setAddSuccess(result.error);
+        showToast(result.error, true);
       } else {
-        setAddSuccess("Request sent!");
+        showToast(`Friend request sent to @${targetUsername}`);
         setSearchResults((prev) => prev.filter((r) => r.username !== targetUsername));
       }
     },
-    [friendships],
+    [friendships, showToast],
   );
 
   if (username.loading) {
@@ -297,17 +304,6 @@ export function Social() {
               </div>
             );
           })}
-          {addSuccess && (
-            <p
-              style={{
-                fontSize: "var(--text-xs)",
-                color: addSuccess === "Request sent!" ? "#57AB5A" : "#E5534B",
-                textAlign: "center",
-              }}
-            >
-              {addSuccess}
-            </p>
-          )}
         </div>
       )}
 
@@ -334,6 +330,34 @@ export function Social() {
                 request={req}
                 onAccept={friendships.acceptRequest}
                 onDecline={friendships.declineRequest}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sent requests */}
+      {friendships.pendingOutgoing.length > 0 && (
+        <div>
+          <label
+            style={{
+              display: "block",
+              fontSize: "var(--text-sm)",
+              fontWeight: 600,
+              color: "var(--color-text-secondary)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              marginBottom: "var(--space-2)",
+            }}
+          >
+            Sent Requests ({friendships.pendingOutgoing.length})
+          </label>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+            {friendships.pendingOutgoing.map((req) => (
+              <SentRequestRow
+                key={req.friendshipId}
+                request={req}
+                onCancel={friendships.cancelRequest}
               />
             ))}
           </div>
@@ -509,6 +533,42 @@ export function Social() {
           onCreate={plans.createPlan}
           onClose={() => setShowCreatePlan(false)}
         />
+      )}
+
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            left: 0,
+            right: 0,
+            bottom: "calc(96px + env(safe-area-inset-bottom, 0px))",
+            display: "flex",
+            justifyContent: "center",
+            padding: "0 var(--space-4)",
+            pointerEvents: "none",
+            zIndex: 70,
+          }}
+        >
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              padding: "var(--space-3) var(--space-4)",
+              borderRadius: 9999,
+              background: "rgba(20, 20, 30, 0.9)",
+              backdropFilter: "blur(20px) saturate(180%)",
+              WebkitBackdropFilter: "blur(20px) saturate(180%)",
+              border: `1px solid ${toast.error ? "rgba(229, 83, 75, 0.5)" : "rgba(255, 255, 255, 0.08)"}`,
+              boxShadow: "0 8px 24px rgba(0, 0, 0, 0.4)",
+              color: toast.error ? "#E06050" : "var(--color-text)",
+              fontSize: 14,
+              fontWeight: 600,
+              animation: "feedIn 250ms ease both",
+            }}
+          >
+            {toast.text}
+          </div>
+        </div>
       )}
 
       <style>{`

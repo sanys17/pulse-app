@@ -97,14 +97,35 @@ export function useFriendships() {
   }, [user]);
 
   useEffect(() => {
+    if (!user) return;
     fetchAll();
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") fetchAll();
     };
     document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [fetchAll]);
+
+    // Realtime needs migration 006; the poll keeps requests fresh without it.
+    let debounce: ReturnType<typeof setTimeout> | undefined;
+    const refetchSoon = () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(fetchAll, 250);
+    };
+    const channel = supabase
+      .channel(`friendships:${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "friendships" }, refetchSoon)
+      .subscribe();
+    const poll = setInterval(() => {
+      if (document.visibilityState === "visible") fetchAll();
+    }, 20000);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      clearTimeout(debounce);
+      clearInterval(poll);
+      supabase.removeChannel(channel);
+    };
+  }, [user, fetchAll]);
 
   const sendRequest = useCallback(
     async (targetUsername: string): Promise<{ error?: string }> => {
@@ -158,6 +179,11 @@ export function useFriendships() {
     [],
   );
 
+  const cancelRequest = useCallback(async (friendshipId: string) => {
+    setPendingOutgoing((prev) => prev.filter((r) => r.friendshipId !== friendshipId));
+    await supabase.from("friendships").delete().eq("id", friendshipId);
+  }, []);
+
   const removeFriend = useCallback(
     async (friendshipId: string) => {
       setFriends((prev) => prev.filter((f) => f.friendshipId !== friendshipId));
@@ -199,6 +225,7 @@ export function useFriendships() {
     sendRequest,
     acceptRequest,
     declineRequest,
+    cancelRequest,
     removeFriend,
     searchUsers,
     refetch: fetchAll,
