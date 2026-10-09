@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { subscribeToTables } from "../lib/realtime";
@@ -13,15 +13,20 @@ export function useSharedPlans() {
   const { user } = useAuth();
   const [plans, setPlans] = useState<PlanWithMembers[]>([]);
   const [loading, setLoading] = useState(true);
+  // Only the newest fetch may write state; a delete also bumps it so a response
+  // that was already in flight cannot bring a deleted plan back.
+  const fetchSeq = useRef(0);
 
   const fetchAll = useCallback(async () => {
     if (!user) return;
+    const seq = ++fetchSeq.current;
 
     const { data: memberRows } = await supabase
       .from("plan_members")
       .select("plan_id")
       .eq("user_id", user.id);
 
+    if (seq !== fetchSeq.current) return;
     if (!memberRows || memberRows.length === 0) {
       setPlans([]);
       setLoading(false);
@@ -39,6 +44,7 @@ export function useSharedPlans() {
       supabase.from("plan_members").select("*").in("plan_id", planIds),
     ]);
 
+    if (seq !== fetchSeq.current) return;
     const allMembers = allMembersRes.data ?? [];
     const memberUserIds = [...new Set(allMembers.map((m) => m.user_id))];
 
@@ -61,6 +67,7 @@ export function useSharedPlans() {
       }
     }
 
+    if (seq !== fetchSeq.current) return;
     const result: PlanWithMembers[] = (plansRes.data ?? []).map((p) => ({
       id: p.id,
       creatorId: p.creator_id,
@@ -173,6 +180,9 @@ export function useSharedPlans() {
         .select("id");
       if (error || !data || data.length === 0) return false;
 
+      fetchSeq.current++;
+      setPlans((prev) => prev.filter((p) => p.id !== planId));
+
       await supabase
         .from("activity_feed")
         .delete()
@@ -180,7 +190,6 @@ export function useSharedPlans() {
         .eq("type", "plan_created")
         .eq("payload->>planId", planId);
 
-      setPlans((prev) => prev.filter((p) => p.id !== planId));
       return true;
     },
     [user],
