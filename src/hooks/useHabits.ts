@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { expectRows } from "../lib/monitoring";
 import { useAuth } from "../context/AuthContext";
 import type { Habit, Completion, HabitColor } from "../types";
 
@@ -105,7 +106,8 @@ export function useHabits() {
       if (data.color !== undefined) updateData.color = data.color;
       if (data.frequency !== undefined) updateData.frequency = data.frequency;
 
-      await supabase.from("habits").update(updateData).eq("id", id);
+      const { data: updated, error } = await supabase.from("habits").update(updateData).eq("id", id).select("id");
+      if (!error) expectRows("habits.update", updated);
     },
     []
   );
@@ -114,7 +116,8 @@ export function useHabits() {
     async (id: string) => {
       setHabits((prev) => prev.filter((h) => h.id !== id));
       setCompletions((prev) => prev.filter((c) => c.habitId !== id));
-      await supabase.from("habits").delete().eq("id", id);
+      const { data: removed, error } = await supabase.from("habits").delete().eq("id", id).select("id");
+      if (!error) expectRows("habits.delete", removed);
     },
     []
   );

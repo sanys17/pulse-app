@@ -77,16 +77,18 @@ export function Social() {
 
   const handleAccept = useCallback(
     async (req: FriendRequest) => {
-      await friendships.acceptRequest(req.friendshipId);
-      showToast(`You and ${req.name || req.username} are now friends`);
+      const ok = await friendships.acceptRequest(req.friendshipId);
+      if (ok) showToast(`You and ${req.name || req.username} are now friends`);
+      else showToast("Couldn't accept the request. Try again.", true);
     },
     [friendships, showToast],
   );
 
   const handleDecline = useCallback(
     async (req: FriendRequest) => {
-      await friendships.declineRequest(req.friendshipId);
-      showToast("Request declined");
+      const ok = await friendships.declineRequest(req.friendshipId);
+      if (ok) showToast("Request declined");
+      else showToast("Couldn't decline the request. Try again.", true);
     },
     [friendships, showToast],
   );

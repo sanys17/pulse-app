@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from "rea
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { migrateLocalData } from "../lib/migrate";
+import { setMonitoringUser } from "../lib/monitoring";
 
 interface AuthContextValue {
   user: User | null;
@@ -18,6 +19,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [migrating, setMigrating] = useState(false);
+
+  useEffect(() => {
+    setMonitoringUser(user?.id ?? null);
+  }, [user?.id]);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { subscribeToTables } from "../lib/realtime";
+import { expectRows, reportError } from "../lib/monitoring";
 import type { SharedPlan, PlanMember, ChecklistItem } from "../types";
 
 export interface PlanWithMembers extends SharedPlan {
@@ -135,7 +136,13 @@ export function useSharedPlans() {
         rsvp: uid === user.id ? "going" : "pending",
       }));
 
-      await supabase.from("plan_members").insert(memberInserts);
+      const { error: membersError } = await supabase.from("plan_members").insert(memberInserts);
+      if (membersError) {
+        // Don't leave a plan nobody (not even the creator) is a member of.
+        reportError(membersError, { area: "create-plan", target: "plan_members" });
+        await supabase.from("shared_plans").delete().eq("id", plan.id);
+        return undefined;
+      }
 
       await supabase.from("activity_feed").insert({
         user_id: user.id,
@@ -192,13 +199,15 @@ export function useSharedPlans() {
         ),
       );
 
-      await supabase
+      const { data, error } = await supabase
         .from("plan_members")
         .update({ rsvp })
         .eq("plan_id", planId)
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .select("id");
+      if (error || !expectRows("plan_members.rsvp", data)) await fetchAll();
     },
-    [user],
+    [user, fetchAll],
   );
 
   const fetchChecklist = useCallback(async (planId: string): Promise<ChecklistItem[]> => {

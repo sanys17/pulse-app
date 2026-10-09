@@ -82,9 +82,10 @@ export function FriendsSheet({ friendships, username, initialQuery = "", notify,
   }, [username]);
 
   const handleRemove = async (friendshipId: string, name: string) => {
-    await removeFriend(friendshipId);
+    const ok = await removeFriend(friendshipId);
     setConfirmId(null);
-    notify(`Removed ${name}`);
+    if (ok) notify(`Removed ${name}`);
+    else notify(`Couldn't remove ${name}. Try again.`, true);
   };
 
   return (

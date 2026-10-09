@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { expectRows } from "../lib/monitoring";
 import { useAuth } from "../context/AuthContext";
 
 export interface Task {
@@ -72,12 +73,14 @@ export function useTasks() {
       return t;
     }));
 
-    await supabase.from("tasks").update({ done: newDone }).eq("id", id);
+    const { data, error } = await supabase.from("tasks").update({ done: newDone }).eq("id", id).select("id");
+    if (!error) expectRows("tasks.update", data);
   }, []);
 
   const deleteTask = useCallback(async (id: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== id));
-    await supabase.from("tasks").delete().eq("id", id);
+    const { data, error } = await supabase.from("tasks").delete().eq("id", id).select("id");
+    if (!error) expectRows("tasks.delete", data);
   }, []);
 
   return { tasks, loading, addTask, toggleTask, deleteTask };
