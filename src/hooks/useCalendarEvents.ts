@@ -54,10 +54,10 @@ export function useCalendarEvents() {
     };
   }, [user]);
 
-  const addEvent = useCallback(async (data: { title: string; date: string; time: string; location: string }) => {
+  const addEvent = useCallback(async (data: { title: string; date: string; time: string; location: string; alerts?: number[] | null }) => {
     if (!user) return;
     const tempId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-    const optimistic: CalendarEvent = { id: tempId, ...data };
+    const optimistic: CalendarEvent = { id: tempId, title: data.title, date: data.date, time: data.time, location: data.location };
     setEvents((prev) => [...prev, optimistic]);
 
     const { data: inserted, error } = await supabase
@@ -68,6 +68,7 @@ export function useCalendarEvents() {
         date: data.date,
         time: data.time || null,
         location: data.location || null,
+        alerts: data.alerts ?? null,
       })
       .select()
       .single();
