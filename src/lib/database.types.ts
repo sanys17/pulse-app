@@ -264,6 +264,21 @@ export type Database = {
         };
         Relationships: [];
       };
+      feed_reactions: {
+        Row: {
+          entry_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          entry_id: string;
+          user_id: string;
+        };
+        Update: {
+          entry_id?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };

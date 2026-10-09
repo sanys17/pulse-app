@@ -14,6 +14,7 @@ All on `master`, deployed on Vercel, `npm run build` passes. No test runner exis
 | Design system + CLAUDE.md | Done, merged (PR #5) |
 | Friends' profile visibility (migration 005) | Merged (PR #6). `005` run in Supabase by the user; names/avatars not separately confirmed |
 | Friend requests: toast, Sent Requests section, live updates (migration 006), pinned dev port, `.local` host | In PR #8 (open). `006` and `007` are applied, so live updates are on for friendships, plans, members, checklist and feed (shared helper `src/lib/realtime.ts`); friendships also polls every 20s as a fallback. Own-data tables (habits, tasks, events) are not live yet: a refetch triggered by the user's own tap can revert a fast second tap, so it needs an echo guard first |
+| Social tab redesign: needs-you requests, upcoming plans with day/time, friends' activity grouped by day with one-tap cheer, drag-to-dismiss sheets, 44px targets, tokens | Built on branch `feat/social-redesign` (local, not pushed). Not tested on a device. Needs `008_feed_reactions.sql` run in Supabase for cheers |
 | **Push notifications** | **Spec only** (`docs/superpowers/specs/2026-10-08-push-notifications-design.md`, Draft). No implementation: no service-worker push handler, no `push_subscriptions` migration (002 reserved), no sender |
 
 ## Supabase (user runs SQL manually in the SQL Editor)

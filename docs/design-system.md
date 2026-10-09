@@ -28,7 +28,7 @@ Use semantic tokens (`--color-*`), never raw hex, in new code.
 
 **Habit colors** (six, from `HABIT_COLORS` in `src/types.ts`): Rose, Sky, Sage, Amber, Iris, Clay. Each has `bg` (tint), `text`, and `fill` (solid). Use `bg` + `text` for chips and icons, `fill` for progress and bars.
 
-**Status colors** (hard-coded today, see Known drift): success `#66BB6A`, info/Google Calendar `#64B5F6`, destructive `#E5484D`.
+**Status colors** (tokens): `--color-success` `#66BB6A`, `--color-info` `#64B5F6`, `--color-danger` `#E5484D`. The Social tab uses them; other screens still hard-code the hex (see Known drift).
 
 **Heatmap:** `--color-heat-0..4`, the accent at 0 / 14 / 30 / 52 / 78% opacity.
 
@@ -85,6 +85,8 @@ Never stack a light translucent surface on another. Always include the `-webkit-
 
 ## 7. Components
 
+**Utilities:** add `className="press"` to buttons for touch-down feedback (`scale(0.97)`; iOS needs the touchstart listener in `main.tsx`). `fade-up` is the entrance animation, `pop` is the one-shot spring for toggles; both are disabled under `prefers-reduced-motion`. `src/lib/spring.ts` has `animateSpring`, `project` and `rubberband` for gestures.
+
 | Component | File | Notes |
 |---|---|---|
 | Bottom nav | `components/BottomNav.tsx` | Glass pill, 4 icon tabs at 44px + separate FAB (44px circle). Active = filled icon + `rgba(255,255,255,0.08)` pill |
@@ -92,8 +94,10 @@ Never stack a light translucent surface on another. Always include the `-webkit-
 | Habit form | `components/HabitForm.tsx` | Sheet; icon picker + six color swatches |
 | Quick log | `components/QuickLog.tsx` | Fast completion list for today |
 | Weekly heatmap | `components/WeeklyHeatmap.tsx` | Uses `--color-heat-*` |
-| Plan / feed / friend cards | `PlanCard`, `FeedCard`, `FriendRequestCard` | Card surface, 12px radius |
-| Sheets | `CreatePlanSheet`, `FriendsSheet`, `UsernameSetup` | Glass/sheet surface, `--radius-lg` top corners |
+| Plan / request cards | `PlanCard`, `FriendRequestCard` | Card surface (not glass), 12px radius, 44px actions |
+| Feed | `FeedRow` | Rows grouped by day inside one card; one-tap cheer button (44px, `aria-pressed`) |
+| Sheet | `Sheet.tsx` | Glass, drag-to-dismiss with spring + velocity projection, exit animation, scrim, Esc, reduced-motion fallback. `FriendsSheet` and `CreatePlanSheet` are built on it |
+| Shared bits | `Avatar`, `SectionHeader` | Use these instead of re-implementing initials circles and uppercase labels |
 | Integration row | in `pages/Settings.tsx` | Card + status pill (green connected / neutral connect) |
 
 **Buttons:** primary action 44px high, radius 8, accent tint background (`rgba(167,139,250,0.25)` today) with accent text; secondary is transparent with a 1px `--color-border`; destructive is `#E5484D` fill with white text, shown only after a confirm step.

@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import type { FriendRequest } from "../types";
+import { Avatar } from "./Avatar";
 
 interface SentRequestRowProps {
   request: FriendRequest;
@@ -30,32 +31,7 @@ export function SentRequestRow({ request, onCancel }: SentRequestRowProps) {
         transition: "opacity 150ms ease",
       }}
     >
-      <div
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: "50%",
-          background: "var(--color-surface-dim)",
-          overflow: "hidden",
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 14,
-          fontWeight: 700,
-          color: "var(--p-accent)",
-        }}
-      >
-        {request.avatarUrl ? (
-          <img
-            src={request.avatarUrl}
-            alt=""
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-        ) : (
-          label.charAt(0).toUpperCase()
-        )}
-      </div>
+      <Avatar name={label} src={request.avatarUrl} size={40} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
         <div style={{ fontSize: "var(--text-xs)", color: "var(--color-text-tertiary)" }}>
@@ -63,6 +39,7 @@ export function SentRequestRow({ request, onCancel }: SentRequestRowProps) {
         </div>
       </div>
       <button
+        className="press"
         onClick={handleCancel}
         disabled={cancelling}
         aria-label={`Cancel request to ${label}`}
