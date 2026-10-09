@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import { useHabitsContext } from "../context/HabitsContext";
 import { useProfile } from "../hooks/useProfile";
+import { NotificationSettings } from "../components/NotificationSettings";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 
@@ -154,6 +155,12 @@ export function Settings() {
             detail="Coming Soon"
           />
         </div>
+      </section>
+
+      {/* Notifications */}
+      <section>
+        <SectionLabel>Notifications</SectionLabel>
+        <NotificationSettings />
       </section>
 
       {/* Data */}
