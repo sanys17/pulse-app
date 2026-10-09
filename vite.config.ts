@@ -6,7 +6,8 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   // Fixed port: the Supabase redirect allow-list contains this exact origin.
   // strictPort fails instead of silently moving to 5174 when 5173 is busy.
-  server: { port: 5173, strictPort: true },
+  // `.local` lets a phone use the Mac's Bonjour name (stable across networks, unlike its IP).
+  server: { port: 5173, strictPort: true, allowedHosts: ['.local'] },
   plugins: [
     react(),
     tailwindcss(),
