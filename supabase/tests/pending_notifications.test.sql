@@ -110,7 +110,47 @@ do $$ declare a constant uuid := 'aaaaaaaa-0000-0000-0000-000000000001'; r recor
   assert pg_temp.cnt('2026-11-01 08:00:00+00', a, 'plan') = 1, 'P5 date-only';
 end $$;
 
--- ===== [B] invitations and friend requests (added in Task 4) =====
+-- ===== [B] invitations and friend requests =====
+insert into public.shared_plans (id, creator_id, title, date, time, status) values
+  ('bbbbbbbb-0000-0000-0000-000000000010', 'aaaaaaaa-0000-0000-0000-000000000002', 'Dinner', null, null, 'planning');
+insert into public.plan_members (plan_id, user_id, rsvp, joined_at) values
+  ('bbbbbbbb-0000-0000-0000-000000000010', 'aaaaaaaa-0000-0000-0000-000000000002', 'going', '2026-11-05 10:00:00+00'),
+  ('bbbbbbbb-0000-0000-0000-000000000010', 'aaaaaaaa-0000-0000-0000-000000000001', 'pending', '2026-11-05 10:00:00+00');
+
+do $$ declare a constant uuid := 'aaaaaaaa-0000-0000-0000-000000000001'; b constant uuid := 'aaaaaaaa-0000-0000-0000-000000000002'; r record; begin
+  assert pg_temp.cnt('2026-11-05 10:10:00+00', a, 'invite') = 1, 'invite within 15 minutes';
+  select * into r from public.pending_notifications('2026-11-05 10:10:00+00') where user_id = a and kind = 'invite';
+  assert r.title = 'New plan invitation', 'invite title';
+  assert r.body like '% invited you to Dinner', 'invite body: ' || r.body;
+  assert r.url = '/social/plan/bbbbbbbb-0000-0000-0000-000000000010', 'invite url';
+  assert pg_temp.cnt('2026-11-05 10:16:00+00', a, 'invite') = 0, 'invite expires after 15 minutes';
+  assert pg_temp.cnt('2026-11-05 10:10:00+00', b, 'invite') = 0, 'creator is not invited to their own plan';
+  update public.plan_members set rsvp = 'going' where plan_id = 'bbbbbbbb-0000-0000-0000-000000000010' and user_id = a;
+  assert pg_temp.cnt('2026-11-05 10:10:00+00', a, 'invite') = 0, 'answered invitation is not announced';
+  update public.plan_members set rsvp = 'pending' where plan_id = 'bbbbbbbb-0000-0000-0000-000000000010' and user_id = a;
+  update public.notification_preferences set plan_invites = false where user_id = a;
+  assert pg_temp.cnt('2026-11-05 10:10:00+00', a, 'invite') = 0, 'invites switched off';
+  update public.notification_preferences set plan_invites = true where user_id = a;
+end $$;
+
+insert into public.friendships (requester_id, addressee_id, status, created_at) values
+  ('aaaaaaaa-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000001', 'pending', '2026-11-06 11:00:00+00');
+
+do $$ declare a constant uuid := 'aaaaaaaa-0000-0000-0000-000000000001'; b constant uuid := 'aaaaaaaa-0000-0000-0000-000000000002'; r record; begin
+  assert pg_temp.cnt('2026-11-06 11:10:00+00', a, 'friend') = 1, 'friend request notifies the recipient';
+  select * into r from public.pending_notifications('2026-11-06 11:10:00+00') where user_id = a and kind = 'friend';
+  assert r.title = 'New friend request', 'friend title';
+  assert r.body like '% wants to be friends', 'friend body: ' || r.body;
+  assert r.url = '/social', 'friend url';
+  assert pg_temp.cnt('2026-11-06 11:10:00+00', b, 'friend') = 0, 'requester is not notified';
+  assert pg_temp.cnt('2026-11-06 11:16:00+00', a, 'friend') = 0, 'friend request expires after 15 minutes';
+  update public.friendships set status = 'accepted' where addressee_id = a;
+  assert pg_temp.cnt('2026-11-06 11:10:00+00', a, 'friend') = 0, 'accepted request is not announced';
+  update public.friendships set status = 'pending' where addressee_id = a;
+  update public.notification_preferences set friend_requests = false where user_id = a;
+  assert pg_temp.cnt('2026-11-06 11:10:00+00', a, 'friend') = 0, 'friend requests switched off';
+  update public.notification_preferences set friend_requests = true where user_id = a;
+end $$;
 -- ===== [C] habits and morning summary (added in Task 5) =====
 
 select 'ALL TESTS PASSED' as result;

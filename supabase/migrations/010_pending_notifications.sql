@@ -85,12 +85,46 @@ as $$
                   end
   ),
 
-  -- [B-ctes] invitations and friend requests are added here (Task 4)
+  invite_due as (
+    select u.user_id, 'invite'::text as kind, pm.plan_id::text as reference_id,
+           'New plan invitation'::text as title,
+           coalesce(nullif(cp.name, ''), '@' || cun.username, 'Someone') || ' invited you to ' || sp.title as body,
+           ('/social/plan/' || sp.id::text) as url,
+           ('invite-' || sp.id::text) as tag
+    from public.plan_members pm
+    join public.shared_plans sp on sp.id = pm.plan_id
+    join u on u.user_id = pm.user_id
+    left join public.profiles cp on cp.user_id = sp.creator_id
+    left join public.usernames cun on cun.user_id = sp.creator_id
+    where u.plan_invites
+      and pm.rsvp = 'pending'
+      and pm.user_id <> sp.creator_id
+      and pm.joined_at <= p_now
+      and pm.joined_at > p_now - interval '15 minutes'
+  ),
+  friend_due as (
+    select u.user_id, 'friend'::text as kind, f.id::text as reference_id,
+           'New friend request'::text as title,
+           coalesce(nullif(rp.name, ''), '@' || ru.username, 'Someone') || ' wants to be friends' as body,
+           '/social'::text as url,
+           ('friend-' || f.id::text) as tag
+    from public.friendships f
+    join u on u.user_id = f.addressee_id
+    left join public.profiles rp on rp.user_id = f.requester_id
+    left join public.usernames ru on ru.user_id = f.requester_id
+    where u.friend_requests
+      and f.status = 'pending'
+      and f.created_at <= p_now
+      and f.created_at > p_now - interval '15 minutes'
+  ),
   -- [C-ctes] habit reminders and the morning summary are added here (Task 5)
 
   all_due as (
     select * from reminders
-    -- [B-union]
+    union all
+    select * from invite_due
+    union all
+    select * from friend_due
     -- [C-union]
   )
   select d.user_id, d.kind, d.reference_id, d.title, d.body, d.url, d.tag
