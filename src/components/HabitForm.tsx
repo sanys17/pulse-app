@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
-import { X } from "@phosphor-icons/react";
+import { useState } from "react";
 import { HABIT_COLORS, HABIT_ICONS } from "../types";
 import type { Habit, HabitColor, HabitInput } from "../types";
 import { SelectField } from "./SelectField";
 import { timeOptions } from "../lib/notificationPrefs.ts";
 import { IconPicker } from "./IconPicker";
+import { Sheet } from "./Sheet";
 
 interface HabitFormProps {
   habit?: Habit;
@@ -26,25 +26,6 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
   const colorSet = HABIT_COLORS[color];
   const isEditing = !!habit;
 
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, []);
-
-  const handleEscape = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    },
-    [onClose]
-  );
-
-  useEffect(() => {
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [handleEscape]);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -60,80 +41,8 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
   };
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 100,
-        display: "flex",
-        alignItems: "flex-end",
-        justifyContent: "center",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: "rgba(0, 0, 0, 0.3)",
-          backdropFilter: "blur(4px)",
-          WebkitBackdropFilter: "blur(4px)",
-        }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      <form
-        onSubmit={handleSubmit}
-        role="dialog"
-        aria-label={isEditing ? "Edit habit" : "New habit"}
-        style={{
-          position: "relative",
-          width: "100%",
-          maxWidth: 430,
-          maxHeight: "85dvh",
-          overflow: "auto",
-          background: "var(--color-surface)",
-          borderRadius: "var(--radius-lg) var(--radius-lg) 0 0",
-          padding: "var(--space-6)",
-          paddingBottom: "calc(var(--space-8) + env(safe-area-inset-bottom, 0px))",
-          animation: "slideUp 300ms cubic-bezier(0.34, 1.56, 0.64, 1)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "var(--space-6)",
-          }}
-        >
-          <h2
-            style={{
-              fontSize: "var(--text-xl)",
-              fontWeight: 700,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            {isEditing ? "Edit habit" : "New habit"}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: "50%",
-              background: "var(--color-surface-dim)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <X size={16} weight="bold" />
-          </button>
-        </div>
-
+    <Sheet title={isEditing ? "Edit habit" : "New habit"} onClose={onClose}>
+      <form onSubmit={handleSubmit}>
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
           <div>
             <label
@@ -361,6 +270,6 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
           </button>
         </div>
       </form>
-    </div>
+    </Sheet>
   );
 }
