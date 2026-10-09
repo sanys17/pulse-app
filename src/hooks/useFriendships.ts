@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { subscribeToTables } from "../lib/realtime";
 import type { Friend, FriendRequest } from "../types";
 
 interface UserSearchResult {
@@ -106,24 +107,15 @@ export function useFriendships() {
     document.addEventListener("visibilitychange", handleVisibility);
 
     // Realtime needs migration 006; the poll keeps requests fresh without it.
-    let debounce: ReturnType<typeof setTimeout> | undefined;
-    const refetchSoon = () => {
-      clearTimeout(debounce);
-      debounce = setTimeout(fetchAll, 250);
-    };
-    const channel = supabase
-      .channel(`friendships:${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "friendships" }, refetchSoon)
-      .subscribe();
+    const unsubscribe = subscribeToTables(["friendships"], fetchAll);
     const poll = setInterval(() => {
       if (document.visibilityState === "visible") fetchAll();
     }, 20000);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
-      clearTimeout(debounce);
       clearInterval(poll);
-      supabase.removeChannel(channel);
+      unsubscribe();
     };
   }, [user, fetchAll]);
 

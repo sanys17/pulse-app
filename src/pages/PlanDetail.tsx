@@ -11,6 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import { useAuth } from "../context/AuthContext";
 import { useSocial } from "../context/SocialContext";
+import { subscribeToTables } from "../lib/realtime";
 import type { ChecklistItem, PlanMember } from "../types";
 import type { PlanWithMembers } from "../hooks/useSharedPlans";
 
@@ -47,15 +48,17 @@ export function PlanDetail() {
   const [newItem, setNewItem] = useState("");
   const [loadingChecklist, setLoadingChecklist] = useState(true);
 
+  const loadChecklistItems = plans.fetchChecklist;
   const fetchChecklist = useCallback(async () => {
     if (!id) return;
-    const items = await plans.fetchChecklist(id);
+    const items = await loadChecklistItems(id);
     setChecklist(items);
     setLoadingChecklist(false);
-  }, [id, plans]);
+  }, [id, loadChecklistItems]);
 
   useEffect(() => {
     fetchChecklist();
+    return subscribeToTables(["plan_checklist"], fetchChecklist);
   }, [fetchChecklist]);
 
   const handleAddItem = useCallback(async () => {

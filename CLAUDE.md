@@ -29,7 +29,8 @@ Short version: tokens from `src/index.css` (`--color-*`, `--space-*`, `--radius-
 - localStorage is only used for the Google Calendar token and the one-time migration flag (`src/lib/migrate.ts`). Do not add new app data to localStorage.
 
 ## Supabase migrations
-- Files in `supabase/migrations`, run **manually** by the user in the Supabase SQL Editor, in order (001, 003, 004, 005, 006; 002 is reserved for push notifications). Tell the user which file to run; you cannot run it.
+- Live updates: use `subscribeToTables([...], refetch)` from `src/lib/realtime.ts` in a hook's effect (debounced, refetches after a reconnect). The table must be in the `supabase_realtime` publication via a migration. Social tables are live; own-data tables (habits, completions, tasks, calendar_events) are not yet.
+- Files in `supabase/migrations`, run **manually** by the user in the Supabase SQL Editor, in order (001, 003, 004, 005, 006, 007; 002 is reserved for push notifications). Tell the user which file to run; you cannot run it.
 - RLS pitfalls: an unqualified column inside a policy subquery resolves to the inner table (`pm.plan_id = id` compares to `pm.id`); a policy that queries its own table recurses; an insert with `.select()` needs a SELECT policy the new row already satisfies. For membership checks use a `security definer` helper like `is_plan_member()`.
 - Always filter mutations by `user_id` as well as `id` (defense in depth beyond RLS).
 
