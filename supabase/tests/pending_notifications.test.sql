@@ -151,7 +151,63 @@ do $$ declare a constant uuid := 'aaaaaaaa-0000-0000-0000-000000000001'; b const
   assert pg_temp.cnt('2026-11-06 11:10:00+00', a, 'friend') = 0, 'friend requests switched off';
   update public.notification_preferences set friend_requests = true where user_id = a;
 end $$;
--- ===== [C] habits and morning summary (added in Task 5) =====
+-- ===== [C] habits and morning summary =====
+insert into public.habits (id, user_id, name, icon, color, frequency, created_at) values
+  ('cccccccc-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'Meditate', 'x', 'blue', 'daily',  '2026-01-01'),
+  ('cccccccc-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000001', 'Read',     'x', 'blue', 'daily',  '2026-01-02'),
+  ('cccccccc-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'Plan week','x', 'blue', 'weekly', '2026-01-03'),
+  ('cccccccc-0000-0000-0000-000000000004', 'aaaaaaaa-0000-0000-0000-000000000001', 'Run',      'x', 'blue', 'daily',  '2026-01-04'),
+  ('cccccccc-0000-0000-0000-000000000005', 'aaaaaaaa-0000-0000-0000-000000000001', 'Stretch',  'x', 'blue', 'daily',  '2026-01-05');
+
+do $$ declare a constant uuid := 'aaaaaaaa-0000-0000-0000-000000000001'; r record; begin
+  -- Monday 2026-11-02 (CET): 20:00 local = 19:00Z; weekly habit counts on Monday; names capped at 3
+  assert pg_temp.cnt('2026-11-02 18:59:00+00', a, 'habit') = 0, 'habit too early';
+  assert pg_temp.cnt('2026-11-02 19:00:00+00', a, 'habit') = 1, 'habit at 20:00 local';
+  select * into r from public.pending_notifications('2026-11-02 19:00:00+00') where user_id = a and kind = 'habit';
+  assert r.body = '5 habits left today: Meditate, Read, Plan week +2 more', 'habit body: ' || r.body;
+  assert r.url = '/habits', 'habit url';
+  assert r.reference_id = '2026-11-02', 'habit reference is the local date';
+  assert pg_temp.cnt('2026-11-02 19:29:00+00', a, 'habit') = 1, 'habit catch-up window';
+  assert pg_temp.cnt('2026-11-02 19:30:00+00', a, 'habit') = 0, 'habit window expires after 30 minutes';
+  -- Tuesday: the weekly habit is not due
+  select * into r from public.pending_notifications('2026-11-03 19:00:00+00') where user_id = a and kind = 'habit';
+  assert r.body = '4 habits left today: Meditate, Read, Run +1 more', 'tuesday body: ' || r.body;
+  -- completions shrink the list, all done skips the reminder
+  insert into public.completions (user_id, habit_id, date) values
+    (a, 'cccccccc-0000-0000-0000-000000000001', '2026-11-03'), (a, 'cccccccc-0000-0000-0000-000000000002', '2026-11-03'),
+    (a, 'cccccccc-0000-0000-0000-000000000004', '2026-11-03');
+  select * into r from public.pending_notifications('2026-11-03 19:00:00+00') where user_id = a and kind = 'habit';
+  assert r.body = '1 habit left today: Stretch', 'singular body: ' || r.body;
+  insert into public.completions (user_id, habit_id, date) values (a, 'cccccccc-0000-0000-0000-000000000005', '2026-11-03');
+  assert pg_temp.cnt('2026-11-03 19:00:00+00', a, 'habit') = 0, 'nothing left: no reminder';
+  -- DST: Sunday 2026-10-25, clocks went back that night, so 20:00 local = 19:00Z (a fixed +02:00 would fire at 18:00Z)
+  assert pg_temp.cnt('2026-10-25 18:00:00+00', a, 'habit') = 0, 'habit DST: not at 18:00Z';
+  assert pg_temp.cnt('2026-10-25 19:00:00+00', a, 'habit') = 1, 'habit DST: at 19:00Z';
+  -- late time near midnight: window is cut at midnight, never wraps or errors
+  update public.notification_preferences set habit_reminder_time = '23:50' where user_id = a;
+  assert pg_temp.cnt('2026-11-04 22:55:00+00', a, 'habit') = 1, 'late reminder at 23:55 local';
+  assert pg_temp.cnt('2026-11-04 23:05:00+00', a, 'habit') = 0, '00:05 local next day: window ended';
+  update public.notification_preferences set habit_reminder_time = '20:00' where user_id = a;
+  update public.notification_preferences set habit_reminders = false where user_id = a;
+  assert pg_temp.cnt('2026-11-02 19:00:00+00', a, 'habit') = 0, 'habit reminders switched off';
+  update public.notification_preferences set habit_reminders = true where user_id = a;
+end $$;
+
+-- morning summary: Tuesday 2026-11-03, 07:00 local = 06:00Z; one event today, 4 open daily habits (completions above are cleared first)
+delete from public.completions where user_id = 'aaaaaaaa-0000-0000-0000-000000000001';
+insert into public.calendar_events (user_id, title, date, time) values ('aaaaaaaa-0000-0000-0000-000000000001', 'E8', '2026-11-03', '09:00');
+do $$ declare a constant uuid := 'aaaaaaaa-0000-0000-0000-000000000001'; b constant uuid := 'aaaaaaaa-0000-0000-0000-000000000002'; r record; begin
+  assert pg_temp.cnt('2026-11-03 05:59:00+00', a, 'morning') = 0, 'morning too early';
+  select * into r from public.pending_notifications('2026-11-03 06:00:00+00') where user_id = a and kind = 'morning';
+  assert r.body = '1 event today · 4 habits to go', 'morning body: ' || r.body;
+  assert r.title = 'Good morning' and r.url = '/', 'morning title/url';
+  assert pg_temp.cnt('2026-11-03 06:31:00+00', a, 'morning') = 0, 'morning window expires';
+  -- nothing to say: no events, no habits (B has no habits, and no events on this date)
+  assert pg_temp.cnt('2026-12-01 06:00:00+00', b, 'morning') = 0, 'nothing today: no summary';
+  update public.notification_preferences set morning_summary = false where user_id = a;
+  assert pg_temp.cnt('2026-11-03 06:00:00+00', a, 'morning') = 0, 'morning switched off';
+  update public.notification_preferences set morning_summary = true where user_id = a;
+end $$;
 
 select 'ALL TESTS PASSED' as result;
 rollback;

@@ -117,7 +117,65 @@ as $$
       and f.created_at <= p_now
       and f.created_at > p_now - interval '15 minutes'
   ),
-  -- [C-ctes] habit reminders and the morning summary are added here (Task 5)
+  -- habits still open today (daily every day; weekly on Monday, like the app)
+  open_habits as (
+    select u.user_id, u.local_now, h.name, h.created_at
+    from u
+    join public.habits h on h.user_id = u.user_id
+    where (h.frequency = 'daily' or (h.frequency = 'weekly' and extract(isodow from u.local_now) = 1))
+      and not exists (
+        select 1 from public.completions c where c.habit_id = h.id and c.date = u.local_now::date
+      )
+  ),
+  habit_agg as (
+    select x.user_id, count(*) as n,
+           string_agg(x.name, ', ' order by x.created_at) filter (where x.rn <= 3) as names
+    from (
+      select o.*, row_number() over (partition by o.user_id order by o.created_at) as rn
+      from open_habits o
+    ) x
+    group by x.user_id
+  ),
+  habit_due as (
+    select u.user_id, 'habit'::text as kind, (u.local_now::date)::text as reference_id,
+           'Habits'::text as title,
+           a.n || case when a.n = 1 then ' habit' else ' habits' end || ' left today: ' || a.names
+             || case when a.n > 3 then ' +' || (a.n - 3) || ' more' else '' end as body,
+           '/habits'::text as url,
+           ('habit-' || u.local_now::date::text) as tag
+    from u
+    join habit_agg a on a.user_id = u.user_id
+    where u.habit_reminders
+      and u.local_now >= (u.local_now::date + u.habit_reminder_time)
+      and u.local_now <  (u.local_now::date + u.habit_reminder_time) + interval '30 minutes'
+  ),
+  day_counts as (
+    select u.user_id,
+           (select count(*) from public.calendar_events ce
+             where ce.user_id = u.user_id and ce.date = u.local_now::date)
+           + (select count(*) from public.plan_members pm
+               join public.shared_plans sp on sp.id = pm.plan_id
+               where pm.user_id = u.user_id and pm.rsvp <> 'declined'
+                 and sp.status not in ('cancelled', 'completed') and sp.date = u.local_now::date) as events,
+           coalesce((select a.n from habit_agg a where a.user_id = u.user_id), 0) as habits
+    from u
+  ),
+  morning_due as (
+    select u.user_id, 'morning'::text as kind, (u.local_now::date)::text as reference_id,
+           'Good morning'::text as title,
+           concat_ws(' · ',
+             case when c.events > 0 then c.events || (case when c.events = 1 then ' event' else ' events' end) || ' today' end,
+             case when c.habits > 0 then c.habits || (case when c.habits = 1 then ' habit' else ' habits' end) || ' to go' end
+           ) as body,
+           '/'::text as url,
+           ('morning-' || u.local_now::date::text) as tag
+    from u
+    join day_counts c on c.user_id = u.user_id
+    where u.morning_summary
+      and (c.events > 0 or c.habits > 0)
+      and u.local_now >= (u.local_now::date + u.morning_summary_time)
+      and u.local_now <  (u.local_now::date + u.morning_summary_time) + interval '30 minutes'
+  ),
 
   all_due as (
     select * from reminders
@@ -125,7 +183,10 @@ as $$
     select * from invite_due
     union all
     select * from friend_due
-    -- [C-union]
+    union all
+    select * from habit_due
+    union all
+    select * from morning_due
   )
   select d.user_id, d.kind, d.reference_id, d.title, d.body, d.url, d.tag
   from all_due d
