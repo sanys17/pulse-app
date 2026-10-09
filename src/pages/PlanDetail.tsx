@@ -47,6 +47,9 @@ export function PlanDetail() {
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [newItem, setNewItem] = useState("");
   const [loadingChecklist, setLoadingChecklist] = useState(true);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const loadChecklistItems = plans.fetchChecklist;
   const fetchChecklist = useCallback(async () => {
@@ -93,6 +96,19 @@ export function PlanDetail() {
     },
     [id, plans],
   );
+
+  const handleDeletePlan = useCallback(async () => {
+    if (!id || deleting) return;
+    setDeleting(true);
+    setDeleteError("");
+    const ok = await plans.deletePlan(id);
+    if (ok) {
+      navigate("/social", { replace: true, state: { toast: "Plan deleted" } });
+      return;
+    }
+    setDeleting(false);
+    setDeleteError("Couldn't delete the plan. Check your connection and try again.");
+  }, [id, deleting, plans, navigate]);
 
   if (!plan) {
     return (
@@ -444,6 +460,99 @@ export function PlanDetail() {
           </div>
         )}
       </div>
+
+      {plan.creatorId === user?.id && (
+        <div style={{ paddingTop: "var(--space-2)" }}>
+          {!confirmDelete ? (
+            <button
+              className="press"
+              onClick={() => setConfirmDelete(true)}
+              style={{
+                width: "100%",
+                height: 44,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "var(--space-2)",
+                background: "transparent",
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--color-danger)",
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              <Trash size={16} weight="regular" />
+              Delete plan
+            </button>
+          ) : (
+            <div
+              style={{
+                padding: "var(--space-4)",
+                background: "var(--color-surface)",
+                border: "1px solid var(--color-danger)",
+                borderRadius: "var(--radius-md)",
+              }}
+            >
+              <p style={{ fontSize: 15, fontWeight: 600 }}>Delete "{plan.title}" for everyone?</p>
+              <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-tertiary)", marginTop: "var(--space-1)" }}>
+                The plan, its checklist and everyone's RSVPs will be removed. This can't be undone.
+              </p>
+              {deleteError && (
+                <p role="alert" style={{ fontSize: "var(--text-sm)", color: "var(--color-danger)", marginTop: "var(--space-2)" }}>
+                  {deleteError}
+                </p>
+              )}
+              <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-3)" }}>
+                <button
+                  className="press"
+                  onClick={handleDeletePlan}
+                  disabled={deleting}
+                  style={{
+                    flex: 1,
+                    height: 44,
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--color-danger)",
+                    border: "none",
+                    color: "#fff",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    opacity: deleting ? 0.6 : 1,
+                  }}
+                >
+                  {deleting ? "Deleting..." : "Delete plan"}
+                </button>
+                <button
+                  className="press"
+                  onClick={() => {
+                    setConfirmDelete(false);
+                    setDeleteError("");
+                  }}
+                  disabled={deleting}
+                  style={{
+                    flex: 1,
+                    height: 44,
+                    borderRadius: "var(--radius-sm)",
+                    background: "transparent",
+                    border: "1px solid var(--color-border)",
+                    color: "var(--color-text-secondary)",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

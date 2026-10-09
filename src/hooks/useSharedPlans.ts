@@ -149,6 +149,32 @@ export function useSharedPlans() {
     [user, fetchAll],
   );
 
+  // Creator only (RLS). Cascades to members and checklist; also removes the
+  // "created a plan" feed entry so it doesn't point at a plan that no longer exists.
+  const deletePlan = useCallback(
+    async (planId: string): Promise<boolean> => {
+      if (!user) return false;
+      const { data, error } = await supabase
+        .from("shared_plans")
+        .delete()
+        .eq("id", planId)
+        .eq("creator_id", user.id)
+        .select("id");
+      if (error || !data || data.length === 0) return false;
+
+      await supabase
+        .from("activity_feed")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("type", "plan_created")
+        .eq("payload->>planId", planId);
+
+      setPlans((prev) => prev.filter((p) => p.id !== planId));
+      return true;
+    },
+    [user],
+  );
+
   const updateRsvp = useCallback(
     async (planId: string, rsvp: PlanMember["rsvp"]) => {
       if (!user) return;
@@ -217,6 +243,7 @@ export function useSharedPlans() {
     plans,
     loading,
     createPlan,
+    deletePlan,
     updateRsvp,
     fetchChecklist,
     addChecklistItem,

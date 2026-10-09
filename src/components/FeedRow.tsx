@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Fire, Plant, CheckCircle, MapPin, HandsClapping } from "@phosphor-icons/react";
+import { Fire, Plant, CheckCircle, MapPin, HandsClapping, Trash } from "@phosphor-icons/react";
 import type { FeedEntry } from "../types";
 import { timeAgo } from "../lib/format";
 import { Avatar } from "./Avatar";
@@ -33,9 +33,10 @@ const feedConfig: Record<
 interface FeedRowProps {
   entry: FeedEntry;
   onCheer: (entryId: string) => Promise<boolean>;
+  onDelete: (entryId: string) => void;
 }
 
-export function FeedRow({ entry, onCheer }: FeedRowProps) {
+export function FeedRow({ entry, onCheer, onDelete }: FeedRowProps) {
   const config = feedConfig[entry.type];
   const Icon = config.icon;
   const [popKey, setPopKey] = useState(0);
@@ -93,6 +94,7 @@ export function FeedRow({ entry, onCheer }: FeedRowProps) {
       </div>
 
       {entry.mine ? (
+        <>
         <div
           role="img"
           aria-label={`${entry.cheers} ${entry.cheers === 1 ? "cheer" : "cheers"}`}
@@ -112,6 +114,25 @@ export function FeedRow({ entry, onCheer }: FeedRowProps) {
           <HandsClapping size={22} weight="fill" />
           {entry.cheers}
         </div>
+        <button
+          className="press"
+          onClick={() => onDelete(entry.id)}
+          aria-label="Delete this post"
+          style={{
+            width: 44,
+            height: 44,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-text-tertiary)",
+          }}
+        >
+          <Trash size={18} weight="regular" />
+        </button>
+        </>
       ) : (
 
       <button

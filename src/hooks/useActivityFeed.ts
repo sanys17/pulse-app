@@ -12,6 +12,7 @@ export function useActivityFeed() {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const rawLoaded = useRef(0);
+  const pendingDeletes = useRef(new Map<string, { entry: FeedEntry; timer: ReturnType<typeof setTimeout> }>());
   const ownCheerCounts = useRef<Map<string, number> | null>(null);
   const [incomingCheer, setIncomingCheer] = useState<{ key: number; text: string } | null>(null);
 
@@ -92,7 +93,9 @@ export function useActivityFeed() {
       if (!append) ownCheerCounts.current = new Map([...ownNow].map(([id, e]) => [id, e.cheers]));
 
       // Your own entries only appear once someone has cheered them.
-      const visible = all.filter((e) => !e.mine || e.cheers > 0);
+      const visible = all.filter(
+        (e) => (!e.mine || e.cheers > 0) && !pendingDeletes.current.has(e.id),
+      );
 
       rawLoaded.current = append ? rawLoaded.current + rows.length : rows.length;
       setEntries((prev) => (append ? [...prev, ...visible] : visible));
@@ -121,6 +124,59 @@ export function useActivityFeed() {
     if (!hasMore) return;
     await fetchPage(rawLoaded.current, true);
   }, [hasMore, fetchPage]);
+
+  // Hides the entry now and deletes it for real after 5s, so Undo can cancel the
+  // delete without losing the entry's cheers. Returns the undo function.
+  const commitDelete = useCallback(
+    async (entryId: string) => {
+      pendingDeletes.current.delete(entryId);
+      if (!user) return;
+      const { error } = await supabase.from("activity_feed").delete().eq("id", entryId).eq("user_id", user.id);
+      if (error) fetchPage(0, false, Math.max(PAGE_SIZE, rawLoaded.current));
+    },
+    [user, fetchPage],
+  );
+
+  const deleteEntry = useCallback(
+    (entryId: string): (() => void) | null => {
+      const entry = entries.find((e) => e.id === entryId);
+      if (!entry || !entry.mine) return null;
+      setEntries((prev) => prev.filter((e) => e.id !== entryId));
+      const timer = setTimeout(() => commitDelete(entryId), 5000);
+      pendingDeletes.current.set(entryId, { entry, timer });
+      return () => {
+        const pending = pendingDeletes.current.get(entryId);
+        if (!pending) return;
+        clearTimeout(pending.timer);
+        pendingDeletes.current.delete(entryId);
+        setEntries((prev) =>
+          [...prev, pending.entry].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        );
+      };
+    },
+    [entries, commitDelete],
+  );
+
+  // Don't lose a pending delete if the user leaves the tab or the app is backgrounded.
+  const commitRef = useRef(commitDelete);
+  commitRef.current = commitDelete;
+  useEffect(() => {
+    const pending = pendingDeletes.current;
+    const flush = () => {
+      for (const [id, p] of [...pending]) {
+        clearTimeout(p.timer);
+        commitRef.current(id);
+      }
+    };
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      flush();
+    };
+  }, []);
 
   // Optimistic: flip locally, write, and roll back (returning false) if the write fails.
   const toggleCheer = useCallback(
@@ -157,5 +213,5 @@ export function useActivityFeed() {
     [user, entries],
   );
 
-  return { entries, loading, hasMore, loadMore, toggleCheer, incomingCheer };
+  return { entries, loading, hasMore, loadMore, toggleCheer, deleteEntry, incomingCheer };
 }

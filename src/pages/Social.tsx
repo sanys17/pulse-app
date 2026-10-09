@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { UsersThree, Plus, SpinnerGap } from "@phosphor-icons/react";
 import { useSocial } from "../context/SocialContext";
 import { UsernameSetup } from "../components/UsernameSetup";
@@ -26,6 +26,7 @@ function groupByDay(entries: FeedEntry[]): { label: string; items: FeedEntry[] }
 
 export function Social() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { username, friendships, feed, plans } = useSocial();
 
@@ -33,14 +34,29 @@ export function Social() {
   const [friendsQuery, setFriendsQuery] = useState("");
   const [showCreatePlan, setShowCreatePlan] = useState(false);
   const [showPast, setShowPast] = useState(false);
-  const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null);
+  const [toast, setToast] = useState<{
+    text: string;
+    error: boolean;
+    action?: { label: string; onClick: () => void };
+  } | null>(null);
   const toastTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const showToast = useCallback((text: string, error = false) => {
-    setToast({ text, error });
-    if (toastTimeout.current) clearTimeout(toastTimeout.current);
-    toastTimeout.current = setTimeout(() => setToast(null), 3000);
-  }, []);
+  const showToast = useCallback(
+    (text: string, error = false, action?: { label: string; onClick: () => void }) => {
+      setToast({ text, error, action });
+      if (toastTimeout.current) clearTimeout(toastTimeout.current);
+      toastTimeout.current = setTimeout(() => setToast(null), action ? 5000 : 3000);
+    },
+    [],
+  );
+
+  // A toast handed over by another screen (e.g. "Plan deleted")
+  const handoffToast = (location.state as { toast?: string } | null)?.toast;
+  useEffect(() => {
+    if (!handoffToast) return;
+    showToast(handoffToast);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [handoffToast, showToast, navigate, location.pathname]);
 
   // ?add=username deep link opens the Friends sheet with the search filled in
   const addParam = searchParams.get("add");
@@ -78,6 +94,21 @@ export function Social() {
       const ok = await feed.toggleCheer(entryId);
       if (!ok) showToast("Couldn't send your cheer. Try again.", true);
       return ok;
+    },
+    [feed, showToast],
+  );
+
+  const handleDeleteEntry = useCallback(
+    (entryId: string) => {
+      const undo = feed.deleteEntry(entryId);
+      if (!undo) return;
+      showToast("Post deleted", false, {
+        label: "Undo",
+        onClick: () => {
+          undo();
+          setToast(null);
+        },
+      });
     },
     [feed, showToast],
   );
@@ -350,7 +381,7 @@ export function Social() {
                 >
                   {group.items.map((entry, i) => (
                     <div key={entry.id} style={{ borderTop: i > 0 ? "1px solid var(--color-border)" : "none" }}>
-                      <FeedRow entry={entry} onCheer={handleCheer} />
+                      <FeedRow entry={entry} onCheer={handleCheer} onDelete={handleDeleteEntry} />
                     </div>
                   ))}
                 </div>
@@ -409,7 +440,7 @@ export function Social() {
             display: "flex",
             justifyContent: "center",
             padding: "0 var(--space-4)",
-            pointerEvents: "none",
+            pointerEvents: toast.action ? "auto" : "none",
             zIndex: 70,
           }}
         >
@@ -418,7 +449,9 @@ export function Social() {
             aria-live="polite"
             className="fade-up"
             style={{
-              padding: "var(--space-3) var(--space-4)",
+              padding: toast.action ? "0 var(--space-2) 0 var(--space-4)" : "var(--space-3) var(--space-4)",
+              display: "flex",
+              alignItems: "center",
               borderRadius: 9999,
               background: "rgba(20, 20, 30, 0.9)",
               backdropFilter: "blur(20px) saturate(180%)",
@@ -431,6 +464,26 @@ export function Social() {
             }}
           >
             {toast.text}
+            {toast.action && (
+              <button
+                className="press"
+                onClick={toast.action.onClick}
+                style={{
+                  marginLeft: "var(--space-3)",
+                  minHeight: 44,
+                  padding: "0 var(--space-2)",
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--color-accent)",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {toast.action.label}
+              </button>
+            )}
           </div>
         </div>
       )}
