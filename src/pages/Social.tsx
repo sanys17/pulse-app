@@ -1,46 +1,40 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import {
-  UsersThree,
-  MagnifyingGlass,
-  Plus,
-  UserPlus,
-  SpinnerGap,
-} from "@phosphor-icons/react";
+import { UsersThree, Plus, SpinnerGap } from "@phosphor-icons/react";
 import { useSocial } from "../context/SocialContext";
 import { UsernameSetup } from "../components/UsernameSetup";
 import { FriendRequestCard } from "../components/FriendRequestCard";
-import { SentRequestRow } from "../components/SentRequestRow";
-import { FeedCard } from "../components/FeedCard";
+import { FeedRow } from "../components/FeedRow";
 import { PlanCard } from "../components/PlanCard";
 import { FriendsSheet } from "../components/FriendsSheet";
 import { CreatePlanSheet } from "../components/CreatePlanSheet";
+import { SectionHeader } from "../components/SectionHeader";
+import { Avatar } from "../components/Avatar";
+import { dayLabel, localDateKey } from "../lib/format";
+import type { FeedEntry, FriendRequest } from "../types";
+
+function groupByDay(entries: FeedEntry[]): { label: string; items: FeedEntry[] }[] {
+  const groups: { label: string; items: FeedEntry[] }[] = [];
+  for (const entry of entries) {
+    const label = dayLabel(entry.createdAt);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(entry);
+    else groups.push({ label, items: [entry] });
+  }
+  return groups;
+}
 
 export function Social() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams({});
+  const [searchParams, setSearchParams] = useSearchParams();
   const { username, friendships, feed, plans } = useSocial();
 
   const [showFriends, setShowFriends] = useState(false);
+  const [friendsQuery, setFriendsQuery] = useState("");
   const [showCreatePlan, setShowCreatePlan] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<
-    { userId: string; username: string; name: string; avatarUrl: string | null }[]
-  >([]);
-  const [searching, setSearching] = useState(false);
-  const [addingUser, setAddingUser] = useState<string | null>(null);
+  const [showPast, setShowPast] = useState(false);
   const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null);
   const toastTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  // Handle ?add=username deep link
-  useEffect(() => {
-    const addUser = searchParams.get("add");
-    if (addUser && username.username) {
-      setSearchQuery(addUser);
-      handleSearch(addUser);
-    }
-  }, [searchParams, username.username]);
 
   const showToast = useCallback((text: string, error = false) => {
     setToast({ text, error });
@@ -48,43 +42,58 @@ export function Social() {
     toastTimeout.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
-  const handleSearch = useCallback(
-    async (query: string) => {
-      if (query.trim().length < 2) {
-        setSearchResults([]);
-        return;
-      }
-      setSearching(true);
-      const results = await friendships.searchUsers(query);
-      setSearchResults(results);
-      setSearching(false);
-    },
-    [friendships],
-  );
+  // ?add=username deep link opens the Friends sheet with the search filled in
+  const addParam = searchParams.get("add");
+  useEffect(() => {
+    if (addParam && username.username) {
+      setFriendsQuery(addParam);
+      setShowFriends(true);
+    }
+  }, [addParam, username.username]);
 
-  const onSearchChange = useCallback(
-    (value: string) => {
-      setSearchQuery(value);
-      if (searchTimeout.current) clearTimeout(searchTimeout.current);
-      searchTimeout.current = setTimeout(() => handleSearch(value), 300);
-    },
-    [handleSearch],
-  );
+  const closeFriends = useCallback(() => {
+    setShowFriends(false);
+    setFriendsQuery("");
+    if (searchParams.has("add")) setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
-  const handleSendRequest = useCallback(
-    async (targetUsername: string) => {
-      setAddingUser(targetUsername);
-      const result = await friendships.sendRequest(targetUsername);
-      setAddingUser(null);
-      if (result.error) {
-        showToast(result.error, true);
-      } else {
-        showToast(`Friend request sent to @${targetUsername}`);
-        setSearchResults((prev) => prev.filter((r) => r.username !== targetUsername));
-      }
+  const handleAccept = useCallback(
+    async (req: FriendRequest) => {
+      await friendships.acceptRequest(req.friendshipId);
+      showToast(`You and ${req.name || req.username} are now friends`);
     },
     [friendships, showToast],
   );
+
+  const handleDecline = useCallback(
+    async (req: FriendRequest) => {
+      await friendships.declineRequest(req.friendshipId);
+      showToast("Request declined");
+    },
+    [friendships, showToast],
+  );
+
+  const handleCheer = useCallback(
+    async (entryId: string) => {
+      const ok = await feed.toggleCheer(entryId);
+      if (!ok) showToast("Couldn't send your cheer. Try again.", true);
+      return ok;
+    },
+    [feed, showToast],
+  );
+
+  const { upcoming, past } = useMemo(() => {
+    const today = localDateKey();
+    const isPast = (p: (typeof plans.plans)[number]) =>
+      p.status === "completed" || p.status === "cancelled" || (!!p.date && p.date < today);
+    const dateOf = (p: (typeof plans.plans)[number]) => p.date ?? "9999-12-31";
+    return {
+      upcoming: plans.plans.filter((p) => !isPast(p)).sort((a, b) => dateOf(a).localeCompare(dateOf(b))),
+      past: plans.plans.filter(isPast).sort((a, b) => dateOf(b).localeCompare(dateOf(a))),
+    };
+  }, [plans.plans]);
+
+  const feedGroups = useMemo(() => groupByDay(feed.entries), [feed.entries]);
 
   if (username.loading) {
     return (
@@ -94,7 +103,7 @@ export function Social() {
           alignItems: "center",
           justifyContent: "center",
           minHeight: "50vh",
-          color: "var(--color-text-secondary)",
+          color: "var(--color-text-tertiary)",
         }}
       >
         <SpinnerGap size={24} weight="bold" className="spin" />
@@ -103,362 +112,166 @@ export function Social() {
   }
 
   if (!username.username) {
-    return (
-      <UsernameSetup
-        onClaim={username.claimUsername}
-        checkAvailability={username.checkAvailability}
-      />
-    );
+    return <UsernameSetup onClaim={username.claimUsername} checkAvailability={username.checkAvailability} />;
   }
 
-  const hasRequests = friendships.pendingIncoming.length > 0;
+  const requests = friendships.pendingIncoming;
+  const shownPlans = showPast ? past : upcoming;
+  const friendFaces = friendships.friends.slice(0, 3);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
       {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <h1
-          style={{
-            fontSize: "var(--text-2xl)",
-            fontWeight: 700,
-            letterSpacing: "-0.03em",
-          }}
-        >
-          Social
-        </h1>
-        <button
-          onClick={() => setShowFriends(true)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-2)",
-            padding: "var(--space-2) var(--space-3)",
-            background: "var(--color-surface)",
-            borderRadius: "var(--radius-sm)",
-            border: "1px solid var(--color-border)",
-            cursor: "pointer",
-            fontFamily: "inherit",
-            color: "var(--color-text)",
-            fontSize: 13,
-            fontWeight: 600,
-          }}
-        >
-          <UsersThree size={16} weight="regular" />
-          Friends
-          {friendships.friends.length > 0 && (
-            <span style={{ color: "var(--color-text-secondary)" }}>
-              ({friendships.friends.length})
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* Search */}
-      <div style={{ position: "relative" }}>
-        <MagnifyingGlass
-          size={16}
-          weight="regular"
-          style={{
-            position: "absolute",
-            left: 14,
-            top: "50%",
-            transform: "translateY(-50%)",
-            color: "var(--color-text-secondary)",
-            pointerEvents: "none",
-          }}
-        />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Find friends by username..."
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          style={{
-            width: "100%",
-            height: 44,
-            paddingLeft: 38,
-            paddingRight: "var(--space-3)",
-            background: "var(--color-surface)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-md)",
-            fontSize: 14,
-            color: "var(--color-text)",
-            outline: "none",
-            fontFamily: "inherit",
-          }}
-        />
-        {searching && (
-          <SpinnerGap
-            size={16}
-            weight="bold"
-            className="spin"
-            style={{
-              position: "absolute",
-              right: 14,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "var(--color-text-secondary)",
-            }}
-          />
-        )}
-      </div>
-
-      {/* Search results */}
-      {searchResults.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "var(--space-2)",
-            marginTop: "calc(-1 * var(--space-3))",
-          }}
-        >
-          {searchResults.map((result) => {
-            const alreadyFriend = friendships.friends.some((f) => f.userId === result.userId);
-            const alreadySent = friendships.pendingOutgoing.some(
-              (r) => r.userId === result.userId,
-            );
-
-            return (
-              <div
-                key={result.userId}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "var(--space-3)",
-                  padding: "var(--space-3)",
-                  background: "var(--color-surface)",
-                  borderRadius: "var(--radius-sm)",
-                  border: "1px solid var(--color-border)",
-                }}
-              >
-                <div
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: "50%",
-                    background: "var(--color-surface-dim)",
-                    overflow: "hidden",
-                    flexShrink: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 14,
-                    fontWeight: 700,
-                    color: "var(--p-accent)",
-                  }}
-                >
-                  {result.avatarUrl ? (
-                    <img src={result.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  ) : (
-                    (result.name || result.username).charAt(0).toUpperCase()
-                  )}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{result.name || result.username}</div>
-                  <div style={{ fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
-                    @{result.username}
-                  </div>
-                </div>
-                {alreadyFriend ? (
-                  <span style={{ fontSize: 12, color: "var(--color-text-secondary)", fontWeight: 600 }}>
-                    Friends
-                  </span>
-                ) : alreadySent ? (
-                  <span style={{ fontSize: 12, color: "var(--color-text-secondary)", fontWeight: 600 }}>
-                    Pending
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => handleSendRequest(result.username)}
-                    disabled={addingUser === result.username}
-                    style={{
-                      height: 32,
-                      padding: "0 12px",
-                      borderRadius: "var(--radius-sm)",
-                      background: "var(--p-accent)",
-                      border: "none",
-                      color: "#07070C",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                      opacity: addingUser === result.username ? 0.5 : 1,
-                    }}
-                  >
-                    <UserPlus size={14} weight="bold" />
-                    Add
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Pending requests */}
-      {hasRequests && (
-        <div>
-          <label
-            style={{
-              display: "block",
-              fontSize: "var(--text-sm)",
-              fontWeight: 600,
-              color: "var(--color-text-secondary)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: "var(--space-2)",
-            }}
-          >
-            Pending Requests ({friendships.pendingIncoming.length})
-          </label>
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-            {friendships.pendingIncoming.map((req) => (
-              <FriendRequestCard
-                key={req.friendshipId}
-                request={req}
-                onAccept={friendships.acceptRequest}
-                onDecline={friendships.declineRequest}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Sent requests */}
-      {friendships.pendingOutgoing.length > 0 && (
-        <div>
-          <label
-            style={{
-              display: "block",
-              fontSize: "var(--text-sm)",
-              fontWeight: 600,
-              color: "var(--color-text-secondary)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: "var(--space-2)",
-            }}
-          >
-            Sent Requests ({friendships.pendingOutgoing.length})
-          </label>
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-            {friendships.pendingOutgoing.map((req) => (
-              <SentRequestRow
-                key={req.friendshipId}
-                request={req}
-                onCancel={friendships.cancelRequest}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Shared Plans */}
-      <div>
-        <label
-          style={{
-            display: "block",
-            fontSize: "var(--text-sm)",
-            fontWeight: 600,
-            color: "var(--color-text-secondary)",
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-            marginBottom: "var(--space-2)",
-          }}
-        >
-          Shared Plans
-        </label>
-        <div
-          style={{
-            display: "flex",
-            gap: "var(--space-3)",
-            overflowX: "auto",
-            paddingBottom: "var(--space-2)",
-            scrollSnapType: "x mandatory",
-            WebkitOverflowScrolling: "touch",
-            msOverflowStyle: "none",
-            scrollbarWidth: "none",
-          }}
-        >
-          {plans.plans.map((plan) => (
-            <div key={plan.id} style={{ scrollSnapAlign: "start" }}>
-              <PlanCard plan={plan} onClick={() => navigate(`/social/plan/${plan.id}`)} />
-            </div>
-          ))}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-2)" }}>
+        <h1 style={{ fontSize: "var(--text-2xl)", fontWeight: 700, letterSpacing: "-0.03em" }}>Social</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
           <button
-            onClick={() => setShowCreatePlan(true)}
+            className="press"
+            onClick={() => setShowFriends(true)}
+            aria-label={`Friends, ${friendships.friends.length}`}
             style={{
-              width: 160,
-              minWidth: 160,
-              padding: "var(--space-3)",
-              background: "var(--color-surface)",
-              borderRadius: "var(--radius-md)",
-              border: "1px dashed var(--color-border)",
+              height: 44,
+              padding: "0 var(--space-3)",
               display: "flex",
-              flexDirection: "column",
               alignItems: "center",
-              justifyContent: "center",
               gap: "var(--space-2)",
+              background: "var(--color-surface)",
+              borderRadius: 9999,
+              border: "1px solid var(--color-border)",
               cursor: "pointer",
               fontFamily: "inherit",
-              color: "var(--color-text-secondary)",
-              fontSize: 13,
+              color: "var(--color-text)",
+              fontSize: 14,
               fontWeight: 600,
-              flexShrink: 0,
-              minHeight: 100,
-              scrollSnapAlign: "start",
             }}
           >
-            <Plus size={20} weight="regular" />
-            New Plan
+            {friendFaces.length > 0 ? (
+              <div style={{ display: "flex" }}>
+                {friendFaces.map((f, i) => (
+                  <div key={f.userId} style={{ marginLeft: i > 0 ? -8 : 0 }}>
+                    <Avatar name={f.name || f.username} src={f.avatarUrl} size={24} ring="var(--color-surface)" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <UsersThree size={18} weight="regular" />
+            )}
+            Friends
+            {friendships.friends.length > 0 && (
+              <span style={{ color: "var(--color-text-tertiary)" }}>{friendships.friends.length}</span>
+            )}
+          </button>
+          <button
+            className="press"
+            onClick={() => setShowCreatePlan(true)}
+            aria-label="New plan"
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: "50%",
+              background: "var(--color-accent)",
+              border: "none",
+              color: "#07070C",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >
+            <Plus size={20} weight="bold" />
           </button>
         </div>
       </div>
 
-      {/* Activity Feed */}
-      <div>
-        <label
-          style={{
-            display: "block",
-            fontSize: "var(--text-sm)",
-            fontWeight: 600,
-            color: "var(--color-text-secondary)",
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-            marginBottom: "var(--space-2)",
-          }}
-        >
-          Activity
-        </label>
+      {/* Needs you */}
+      {requests.length > 0 && (
+        <section>
+          <SectionHeader title="Needs you" count={requests.length} />
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+            {requests.map((req) => (
+              <FriendRequestCard key={req.friendshipId} request={req} onAccept={handleAccept} onDecline={handleDecline} />
+            ))}
+          </div>
+        </section>
+      )}
 
-        {feed.loading ? (
+      {/* Plans */}
+      <section>
+        <SectionHeader
+          title={showPast ? "Past plans" : "Upcoming"}
+          action={
+            past.length > 0 || showPast
+              ? { label: showPast ? "Upcoming" : `Past (${past.length})`, onClick: () => setShowPast((v) => !v) }
+              : undefined
+          }
+        />
+        {shownPlans.length === 0 ? (
+          <div
+            style={{
+              padding: "var(--space-6) var(--space-4)",
+              border: "1px dashed var(--color-border)",
+              borderRadius: "var(--radius-md)",
+              textAlign: "center",
+            }}
+          >
+            <p style={{ fontSize: 15, fontWeight: 600 }}>{showPast ? "No past plans" : "Nothing planned yet"}</p>
+            {!showPast && (
+              <>
+                <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-tertiary)", marginTop: "var(--space-1)" }}>
+                  Make a plan and invite your friends.
+                </p>
+                <button
+                  className="press"
+                  onClick={() => setShowCreatePlan(true)}
+                  style={{
+                    height: 44,
+                    marginTop: "var(--space-3)",
+                    padding: "0 var(--space-5)",
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--color-complete-bg)",
+                    border: "none",
+                    color: "var(--color-accent)",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  New plan
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
           <div
             style={{
               display: "flex",
-              justifyContent: "center",
-              padding: "var(--space-8)",
+              gap: "var(--space-3)",
+              overflowX: "auto",
+              scrollSnapType: "x proximity",
+              scrollbarWidth: "none",
+              margin: "0 calc(-1 * var(--space-4))",
+              padding: "0 var(--space-4)",
             }}
           >
-            <SpinnerGap size={20} weight="bold" className="spin" color="var(--color-text-secondary)" />
+            {shownPlans.map((plan) => (
+              <div key={plan.id} style={{ scrollSnapAlign: "start", display: "flex" }}>
+                <PlanCard plan={plan} onClick={() => navigate(`/social/plan/${plan.id}`)} />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Activity */}
+      <section>
+        <SectionHeader title="Friends' activity" />
+        {feed.loading ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: "var(--space-8)" }}>
+            <SpinnerGap size={20} weight="bold" className="spin" color="var(--color-text-tertiary)" />
           </div>
         ) : feed.entries.length === 0 ? (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "var(--space-8) var(--space-4)",
-            }}
-          >
+          <div style={{ textAlign: "center", padding: "var(--space-8) var(--space-4)" }}>
             {friendships.friends.length === 0 ? (
               <>
                 <div
@@ -466,64 +279,107 @@ export function Social() {
                     width: 56,
                     height: 56,
                     borderRadius: "var(--radius-lg)",
-                    background: "rgba(142, 155, 196, 0.12)",
+                    background: "var(--color-complete-bg)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     margin: "0 auto var(--space-3)",
                   }}
                 >
-                  <UsersThree size={24} weight="regular" color="var(--p-accent)" />
+                  <UsersThree size={24} weight="regular" color="var(--color-accent)" />
                 </div>
-                <p style={{ fontSize: 14, fontWeight: 600 }}>Add friends to see their activity</p>
-                <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
-                  Search by username above
-                </p>
+                <p style={{ fontSize: 15, fontWeight: 600 }}>Add friends to see their activity</p>
+                <button
+                  className="press"
+                  onClick={() => setShowFriends(true)}
+                  style={{
+                    height: 44,
+                    marginTop: "var(--space-3)",
+                    padding: "0 var(--space-5)",
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--color-complete-bg)",
+                    border: "none",
+                    color: "var(--color-accent)",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  Find friends
+                </button>
               </>
             ) : (
               <>
-                <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-secondary)" }}>
-                  Your friends have been quiet
-                </p>
-                <p style={{ fontSize: "var(--text-sm)", color: "var(--p-muted)", marginTop: "var(--space-1)" }}>
-                  Check back later
+                <p style={{ fontSize: 15, fontWeight: 600 }}>Your friends have been quiet</p>
+                <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-tertiary)", marginTop: "var(--space-1)" }}>
+                  Streaks, new habits and plans show up here.
                 </p>
               </>
             )}
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-            {feed.entries.map((entry, i) => (
-              <FeedCard key={entry.id} entry={entry} index={i} />
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+            {feedGroups.map((group) => (
+              <div key={group.label}>
+                <h3
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--color-text-secondary)",
+                    padding: "var(--space-2) var(--space-1)",
+                  }}
+                >
+                  {group.label}
+                </h3>
+                <div
+                  className="fade-up"
+                  style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "var(--radius-md)",
+                    overflow: "hidden",
+                  }}
+                >
+                  {group.items.map((entry, i) => (
+                    <div key={entry.id} style={{ borderTop: i > 0 ? "1px solid var(--color-border)" : "none" }}>
+                      <FeedRow entry={entry} onCheer={handleCheer} />
+                    </div>
+                  ))}
+                </div>
+              </div>
             ))}
             {feed.hasMore && (
               <button
+                className="press"
                 onClick={feed.loadMore}
                 style={{
-                  height: 40,
-                  background: "var(--color-surface)",
+                  height: 44,
+                  marginTop: "var(--space-2)",
+                  background: "transparent",
                   border: "1px solid var(--color-border)",
                   borderRadius: "var(--radius-sm)",
                   color: "var(--color-text-secondary)",
-                  fontSize: 13,
+                  fontSize: 14,
                   fontWeight: 600,
                   cursor: "pointer",
                   fontFamily: "inherit",
                 }}
               >
-                Load more
+                Show more
               </button>
             )}
           </div>
         )}
-      </div>
+      </section>
 
       {showFriends && (
         <FriendsSheet
-          friends={friendships.friends}
+          friendships={friendships}
           username={username.username}
-          onRemove={friendships.removeFriend}
-          onClose={() => setShowFriends(false)}
+          initialQuery={friendsQuery}
+          notify={showToast}
+          onClose={closeFriends}
         />
       )}
 
@@ -531,6 +387,7 @@ export function Social() {
         <CreatePlanSheet
           friends={friendships.friends}
           onCreate={plans.createPlan}
+          onCreated={(title) => showToast(`Plan "${title}" created`)}
           onClose={() => setShowCreatePlan(false)}
         />
       )}
@@ -552,18 +409,18 @@ export function Social() {
           <div
             role="status"
             aria-live="polite"
+            className="fade-up"
             style={{
               padding: "var(--space-3) var(--space-4)",
               borderRadius: 9999,
               background: "rgba(20, 20, 30, 0.9)",
               backdropFilter: "blur(20px) saturate(180%)",
               WebkitBackdropFilter: "blur(20px) saturate(180%)",
-              border: `1px solid ${toast.error ? "rgba(229, 83, 75, 0.5)" : "rgba(255, 255, 255, 0.08)"}`,
+              border: `1px solid ${toast.error ? "var(--color-danger)" : "rgba(255, 255, 255, 0.08)"}`,
               boxShadow: "0 8px 24px rgba(0, 0, 0, 0.4)",
-              color: toast.error ? "#E06050" : "var(--color-text)",
+              color: toast.error ? "var(--color-danger)" : "var(--color-text)",
               fontSize: 14,
               fontWeight: 600,
-              animation: "feedIn 250ms ease both",
             }}
           >
             {toast.text}
@@ -574,10 +431,6 @@ export function Social() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         .spin { animation: spin 800ms linear infinite; }
-        @keyframes feedIn {
-          from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
       `}</style>
     </div>
   );

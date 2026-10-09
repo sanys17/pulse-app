@@ -8,6 +8,9 @@ import "@fontsource/geist/700.css";
 import "./index.css";
 import App from "./App";
 
+// iOS Safari only applies :active styles when a touch listener is registered.
+document.addEventListener("touchstart", () => {}, { passive: true });
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>

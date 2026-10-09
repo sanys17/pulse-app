@@ -63,6 +63,8 @@ export interface FeedEntry {
   createdAt: string;
   userName: string;
   userAvatar: string | null;
+  cheers: number;
+  cheeredByMe: boolean;
 }
 
 export interface SharedPlan {
