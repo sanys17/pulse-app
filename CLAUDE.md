@@ -35,9 +35,17 @@ Short version: tokens from `src/index.css` (`--color-*`, `--space-*`, `--radius-
 - A write that "succeeds" with 0 rows is how RLS bugs hide. For important updates/deletes use `.select("id")` and `expectRows("table.operation", data)`.
 - New code: surface errors to the user (toast) and report unexpected ones with `reportError(err, { area, target })`; never swallow them silently.
 
+## Notifications
+- Spec `docs/superpowers/specs/2026-10-08-push-notifications-design.md`, plan `docs/superpowers/plans/2026-10-09-push-notifications.md`, setup and checks `docs/notifications-runbook.md`.
+- What is due is decided in SQL only: `pending_notifications(p_now)` (`supabase/migrations/010_...`). Change rules there and extend `supabase/tests/pending_notifications.test.sql` (fake clock `p_now`; the user runs it in the SQL Editor). The Vercel route `api/send-notifications.ts` is thin; delivery rules live in `api/_lib/notify.ts` and are tested with `npm test`.
+- `npm test` runs `node --test tests/*.test.mts` on pure modules. Pure modules in `src/lib` and `api/_lib` must have no imports except other pure modules, with `.ts` extensions, so node can load them.
+- Alerts follow Apple Calendar offsets, max two per item; `null` = default, `{}` = none (`src/lib/alerts.ts`).
+- The service worker (`src/sw.ts`) does not run in `npm run dev`; push can only be tested on the deployed HTTPS app, on iPhone only from the Home Screen icon.
+- Never expose `VAPID_PRIVATE_KEY`, `CRON_SECRET` or `SUPABASE_SERVICE_ROLE_KEY` to the client (no `VITE_` prefix).
+
 ## Supabase migrations
 - Live updates: use `subscribeToTables([...], refetch)` from `src/lib/realtime.ts` in a hook's effect (debounced, refetches after a reconnect). The table must be in the `supabase_realtime` publication via a migration. Social tables are live; own-data tables (habits, completions, tasks, calendar_events) are not yet.
-- Files in `supabase/migrations`, run **manually** by the user in the Supabase SQL Editor, in order (001, 003, 004, 005, 006, 007, 008; 002 is reserved for push notifications). Tell the user which file to run; you cannot run it.
+- Files in `supabase/migrations`, run **manually** by the user in the Supabase SQL Editor, in order (001, 003 to 010; there is no 002). Tell the user which file to run; you cannot run it.
 - RLS pitfalls: an unqualified column inside a policy subquery resolves to the inner table (`pm.plan_id = id` compares to `pm.id`); a policy that queries its own table recurses; an insert with `.select()` needs a SELECT policy the new row already satisfies. For membership checks use a `security definer` helper like `is_plan_member()`.
 - Always filter mutations by `user_id` as well as `id` (defense in depth beyond RLS).
 

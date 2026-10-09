@@ -63,7 +63,9 @@ Decisions:
 - **Per-user timezone** in `profiles.timezone`, refreshed from `Intl.DateTimeFormat().resolvedOptions().timeZone` whenever the app opens signed in.
 - **VAPID**, no Firebase.
 
-## Database: `supabase/migrations/009_push_notifications.sql`
+## Database: `supabase/migrations/009_push_notifications.sql` and `010_pending_notifications.sql`
+
+Tables, columns and registration are in 009; the `pending_notifications` function is in 010. Devices register through the `register_push_subscription` function (no client insert/update policy on `push_subscriptions`), so a phone that switches accounts is re-assigned instead of colliding with the unique endpoint.
 
 (002 was reserved for this; 009 is the next free number.)
 
