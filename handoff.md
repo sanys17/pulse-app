@@ -15,7 +15,7 @@ All on `master`, deployed on Vercel, `npm run build` passes. No test runner exis
 | Friends' profile visibility (migration 005) | Merged (PR #6). `005` run in Supabase by the user; names/avatars not separately confirmed |
 | Friend requests: toast, Sent Requests section, live updates (migration 006), pinned dev port, `.local` host | In PR #8 (open). `006` and `007` are applied, so live updates are on for friendships, plans, members, checklist and feed (shared helper `src/lib/realtime.ts`); friendships also polls every 20s as a fallback. Own-data tables (habits, tasks, events) are not live yet: a refetch triggered by the user's own tap can revert a fast second tap, so it needs an echo guard first |
 | Social tab redesign: needs-you requests, upcoming plans, friends' activity with one-tap cheers, owner deletes (feed entries with Undo; a plan's activity entry deletes the plan after a confirm), drag-to-dismiss sheets, 44px targets, tokens | Done, merged (PR #10). `008_feed_reactions.sql` run by the user. Not yet confirmed end to end on a device |
-| **Push notifications** | **Spec only** (`docs/superpowers/specs/2026-10-08-push-notifications-design.md`, Draft). No implementation: no service-worker push handler, no `push_subscriptions` migration (002 reserved), no sender |
+| **Push notifications** | **Built on branch `feat/push-notifications`, not merged or switched on.** Spec `docs/superpowers/specs/2026-10-08-push-notifications-design.md`, plan `docs/superpowers/plans/2026-10-09-push-notifications.md`. Needs the steps in `docs/notifications-runbook.md` (keys, migrations 009 and 010, scheduler, heartbeat) before anything is sent; not yet tested on a device |
 
 ## Supabase (user runs SQL manually in the SQL Editor)
 Applied (evidenced by plans working in the app): `001_initial_schema.sql`, `003_social.sql`, `004_fix_plan_policies.sql`., `005_friend_profile_visibility.sql` (run by the user, 2026-10-09). `006_friendships_realtime.sql` and `007_social_realtime.sql` (run by the user, 2026-10-09; verified working with two accounts), `008_feed_reactions.sql` (run by the user). Not confirmed from the repo: whether Google OAuth is configured in Supabase and whether `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set in Vercel (the app throws on startup without them). Ask the user if sign-in or a deploy misbehaves.
@@ -31,6 +31,7 @@ Better Stack error tracking (US region; EU needs a paid plan), app `Pulse-web`. 
 - Still to do by the user: email alert rule for new errors, and an uptime monitor for `https://pulse-app-habit.vercel.app` (the existing monitor points at `matyassana.com`).
 
 ## Known issues (not fixed)
+0. Notifications cannot be tested in `npm run dev` (no service worker); only on the deployed HTTPS app.
 1. **Friends' names/avatars (fix merged and applied; the two-account live-update test passed, but names/avatars were not separately confirmed).** `profiles` RLS was own-row-only; migration 005 adds `can_view_profile()` and a SELECT policy for pending/accepted friends and plan co-members. Verify with two accounts (friends list, requests, feed, shared plan). Username search still shows blank names for unconnected users by design.
 2. **Design drift** (see `docs/design-system.md` section 9): two glass recipes, two accents (Moonstone `#8E9BC4` is canonical per the user's palette; violet `#A78BFA` hard-coded in calendar, sign-in, buttons), raw hex status colors, `transition: all`, low-contrast secondary text (`#626880` is 3.4:1 on cards).
 3. **Data hooks swallow errors** (failures are now reported centrally by `monitoredFetch`, but screens still show nothing; add user-facing toasts and rollback) (`useHabits`, `useTasks`, `useCalendarEvents`, `useProfile`, `useSharedPlans`): an expired token or RLS failure looks like an empty list. `useSharedPlans.createPlan` returns silently on failure, which hid the RLS bug. Surface errors.
@@ -43,7 +44,7 @@ Better Stack error tracking (US region; EU needs a paid plan), app `Pulse-web`. 
 ## Next steps (suggested order)
 1. Live updates for own-data tables (habits, completions, tasks, calendar events) with an echo guard.
 2. Design cleanup: tokens for accent/status colors, one glass recipe, contrast fixes.
-3. Push notifications: review and approve the spec, then plan (`superpowers:writing-plans`), then implement. Needs VAPID keys, `push_subscriptions` table, service-worker push handler (vite-plugin-pwa), a scheduled sender (Supabase Edge Function + pg_cron or Vercel cron), per-user timezone. iOS web push only works for the installed PWA.
+3. Switch push notifications on: merge the branch, then follow `docs/notifications-runbook.md` and verify on an iPhone Home Screen app (the service worker does not run in `npm run dev`).
 4. Add error surfacing to hooks (issue 3).
 
 ## Working with this repo

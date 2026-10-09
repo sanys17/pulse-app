@@ -12,6 +12,9 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { useSocial } from "../context/SocialContext";
 import { subscribeToTables } from "../lib/realtime";
+import { AlertPicker } from "../components/AlertPicker";
+import { SectionHeader } from "../components/SectionHeader";
+import { useNotificationPreferences } from "../hooks/useNotificationPreferences";
 import type { ChecklistItem, PlanMember } from "../types";
 import type { PlanWithMembers } from "../hooks/useSharedPlans";
 
@@ -41,6 +44,7 @@ export function PlanDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { plans } = useSocial();
+  const { prefs } = useNotificationPreferences();
 
   const plan: PlanWithMembers | undefined = plans.plans.find((p) => p.id === id);
 
@@ -140,6 +144,7 @@ export function PlanDetail() {
   }
 
   const myRsvp = plan.members.find((m) => m.userId === user?.id)?.rsvp;
+  const myAlerts = plan.members.find((m) => m.userId === user?.id)?.alerts ?? null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
@@ -254,6 +259,20 @@ export function PlanDetail() {
           ))}
         </div>
       </div>
+
+      {/* Reminder */}
+      {plan.date && prefs && (
+        <div>
+          <SectionHeader title="Remind me" />
+          <AlertPicker
+            value={myAlerts}
+            timed={Boolean(plan.time)}
+            label="Reminder"
+            defaultAlerts={plan.time ? prefs.planAlerts : prefs.alldayAlerts}
+            onChange={(alerts) => plans.updateMyAlerts(plan.id, alerts)}
+          />
+        </div>
+      )}
 
       {/* Members */}
       <div>

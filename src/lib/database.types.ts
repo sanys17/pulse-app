@@ -8,16 +8,19 @@ export type Database = {
           name: string | null;
           avatar_url: string | null;
           created_at: string;
+          timezone: string;
         };
         Insert: {
           id?: string;
           user_id: string;
           name?: string | null;
           avatar_url?: string | null;
+          timezone?: string;
         };
         Update: {
           name?: string | null;
           avatar_url?: string | null;
+          timezone?: string;
         };
         Relationships: [];
       };
@@ -95,6 +98,7 @@ export type Database = {
           time: string | null;
           location: string | null;
           created_at: string;
+          alerts: number[] | null;
         };
         Insert: {
           id?: string;
@@ -103,12 +107,14 @@ export type Database = {
           date: string;
           time?: string | null;
           location?: string | null;
+          alerts?: number[] | null;
         };
         Update: {
           title?: string;
           date?: string;
           time?: string | null;
           location?: string | null;
+          alerts?: number[] | null;
         };
         Relationships: [];
       };
@@ -207,15 +213,18 @@ export type Database = {
           user_id: string;
           rsvp: string;
           joined_at: string;
+          alerts: number[] | null;
         };
         Insert: {
           id?: string;
           plan_id: string;
           user_id: string;
           rsvp?: string;
+          alerts?: number[] | null;
         };
         Update: {
           rsvp?: string;
+          alerts?: number[] | null;
         };
         Relationships: [];
       };
@@ -279,9 +288,65 @@ export type Database = {
         };
         Relationships: [];
       };
+      push_subscriptions: {
+        Row: { id: string; user_id: string; endpoint: string; p256dh: string; auth: string; user_agent: string | null; created_at: string };
+        Insert: { id?: string; user_id: string; endpoint: string; p256dh: string; auth: string; user_agent?: string | null };
+        Update: { user_agent?: string | null };
+        Relationships: [];
+      };
+      notification_preferences: {
+        Row: {
+          user_id: string;
+          calendar_reminders: boolean;
+          event_alerts: number[];
+          plan_reminders: boolean;
+          plan_alerts: number[];
+          plan_invites: boolean;
+          friend_requests: boolean;
+          allday_alerts: number[];
+          habit_reminders: boolean;
+          habit_reminder_time: string;
+          morning_summary: boolean;
+          morning_summary_time: string;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          calendar_reminders?: boolean;
+          event_alerts?: number[];
+          plan_reminders?: boolean;
+          plan_alerts?: number[];
+          plan_invites?: boolean;
+          friend_requests?: boolean;
+          allday_alerts?: number[];
+          habit_reminders?: boolean;
+          habit_reminder_time?: string;
+          morning_summary?: boolean;
+          morning_summary_time?: string;
+        };
+        Update: {
+          calendar_reminders?: boolean;
+          event_alerts?: number[];
+          plan_reminders?: boolean;
+          plan_alerts?: number[];
+          plan_invites?: boolean;
+          friend_requests?: boolean;
+          allday_alerts?: number[];
+          habit_reminders?: boolean;
+          habit_reminder_time?: string;
+          morning_summary?: boolean;
+          morning_summary_time?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      register_push_subscription: {
+        Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_user_agent: string };
+        Returns: undefined;
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

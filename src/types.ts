@@ -87,6 +87,7 @@ export interface PlanMember {
   planId: string;
   userId: string;
   rsvp: "pending" | "going" | "maybe" | "declined";
+  alerts: number[] | null;
   joinedAt: string;
   name: string;
   avatarUrl: string | null;

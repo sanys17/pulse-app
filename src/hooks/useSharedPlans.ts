@@ -79,6 +79,7 @@ export function useSharedPlans() {
           planId: m.plan_id,
           userId: m.user_id,
           rsvp: m.rsvp as PlanMember["rsvp"],
+          alerts: m.alerts ?? null,
           joinedAt: m.joined_at,
           name: profileMap.get(m.user_id)?.name ?? "",
           avatarUrl: profileMap.get(m.user_id)?.avatarUrl ?? null,
@@ -182,6 +183,32 @@ export function useSharedPlans() {
     [user],
   );
 
+  // Each member has their own alert for a plan (like shared events in Apple Calendar).
+  const updateMyAlerts = useCallback(
+    async (planId: string, alerts: number[] | null): Promise<boolean> => {
+      if (!user) return false;
+      setPlans((prev) =>
+        prev.map((p) =>
+          p.id === planId
+            ? { ...p, members: p.members.map((m) => (m.userId === user.id ? { ...m, alerts } : m)) }
+            : p,
+        ),
+      );
+      const { data, error } = await supabase
+        .from("plan_members")
+        .update({ alerts })
+        .eq("plan_id", planId)
+        .eq("user_id", user.id)
+        .select("id");
+      if (error || !expectRows("plan_members.alerts", data)) {
+        await fetchAll();
+        return false;
+      }
+      return true;
+    },
+    [user, fetchAll],
+  );
+
   const updateRsvp = useCallback(
     async (planId: string, rsvp: PlanMember["rsvp"]) => {
       if (!user) return;
@@ -254,6 +281,7 @@ export function useSharedPlans() {
     createPlan,
     deletePlan,
     updateRsvp,
+    updateMyAlerts,
     fetchChecklist,
     addChecklistItem,
     toggleChecklistItem,

@@ -10,6 +10,7 @@ import { SocialProvider } from "./context/SocialContext";
 import { HabitForm } from "./components/HabitForm";
 import { QuickLog } from "./components/QuickLog";
 import { useTheme } from "./hooks/useTheme";
+import { usePushSync } from "./hooks/usePushSync";
 import { Home } from "./pages/Home";
 import { Habits } from "./pages/Habits";
 import { Social } from "./pages/Social";
@@ -42,6 +43,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 function AppContent() {
   useTheme();
+  usePushSync();
   const { addHabit, updateHabit, deleteHabit } = useHabitsContext();
   const { friendships } = useSocial();
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
