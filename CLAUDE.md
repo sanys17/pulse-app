@@ -2,6 +2,9 @@
 
 Mobile-first habit/health tracker PWA. React 19, TypeScript, Vite, React Router, Supabase (Postgres + Auth + RLS), deployed on Vercel. Dark glass UI, tested primarily as an installed iPhone PWA.
 
+## Current status
+@handoff.md
+
 ## Commands
 - `npm run dev` start dev server (the user tests on a phone over LAN HTTP)
 - `npm run build` runs `tsc -b && vite build`. This is the real check.
@@ -9,7 +12,9 @@ Mobile-first habit/health tracker PWA. React 19, TypeScript, Vite, React Router,
 - There is no test runner. Verify with the build, and for UI changes say plainly when you could not test on a device.
 
 ## Design
-Follow [docs/design-system.md](docs/design-system.md). Short version: tokens from `src/index.css` (`--color-*`, `--space-*`, `--radius-*`), 44px tap targets, glass only for floating chrome, springs for motion, Geist font, always dark. Check "Known drift" there before copying an existing pattern; some existing styles are not canonical.
+@docs/design-system.md
+
+Short version: tokens from `src/index.css` (`--color-*`, `--space-*`, `--radius-*`), 44px tap targets, glass only for floating chrome, springs for motion, Geist font, always dark. Check "Known drift" there before copying an existing pattern; some existing styles are not canonical.
 
 ## iOS / PWA rules (each one cost real debugging time)
 - Inputs render at 16px on touch devices (global rule in `src/index.css`), otherwise iOS zooms the page and stays zoomed.
