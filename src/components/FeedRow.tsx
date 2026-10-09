@@ -95,6 +95,7 @@ export function FeedRow({ entry, onCheer, onDelete }: FeedRowProps) {
 
       {entry.mine ? (
         <>
+        {entry.cheers > 0 && (
         <div
           role="img"
           aria-label={`${entry.cheers} ${entry.cheers === 1 ? "cheer" : "cheers"}`}
@@ -114,6 +115,7 @@ export function FeedRow({ entry, onCheer, onDelete }: FeedRowProps) {
           <HandsClapping size={22} weight="fill" />
           {entry.cheers}
         </div>
+        )}
         <button
           className="press"
           onClick={() => onDelete(entry.id)}
