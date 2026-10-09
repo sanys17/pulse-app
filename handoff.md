@@ -13,10 +13,16 @@ All on `master`, deployed on Vercel, `npm run build` passes. No test runner exis
 | iOS input zoom fix (16px inputs) | Done, merged (PR #4). Not yet confirmed on device |
 | Design system + CLAUDE.md | Done, merged (PR #5) |
 | Friends' profile visibility (migration 005) | Merged (PR #6). `005` run in Supabase by the user; two-account verification still to do |
+| Friend requests: toast, Sent Requests section, live updates (migration 006), pinned dev port, `.local` host | In PR #8 (open). `006` must be run in Supabase for instant updates; a 20s poll works without it |
 | **Push notifications** | **Spec only** (`docs/superpowers/specs/2026-10-08-push-notifications-design.md`, Draft). No implementation: no service-worker push handler, no `push_subscriptions` migration (002 reserved), no sender |
 
 ## Supabase (user runs SQL manually in the SQL Editor)
-Applied (evidenced by plans working in the app): `001_initial_schema.sql`, `003_social.sql`, `004_fix_plan_policies.sql`., `005_friend_profile_visibility.sql` (run by the user, 2026-10-09). Not confirmed from the repo: whether Google OAuth is configured in Supabase and whether `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set in Vercel (the app throws on startup without them). Ask the user if sign-in or a deploy misbehaves.
+Applied (evidenced by plans working in the app): `001_initial_schema.sql`, `003_social.sql`, `004_fix_plan_policies.sql`., `005_friend_profile_visibility.sql` (run by the user, 2026-10-09). Pending: `006_friendships_realtime.sql`. Not confirmed from the repo: whether Google OAuth is configured in Supabase and whether `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set in Vercel (the app throws on startup without them). Ask the user if sign-in or a deploy misbehaves.
+
+## Local dev setup (hard-won)
+- Run `npm run dev -- --host`; port is pinned to 5173 with `strictPort`. Phone URL: `http://charlie.local:5173` (`allowedHosts: ['.local']` in `vite.config.ts`).
+- Supabase Auth, Redirect URLs must contain `http://localhost:5173/**` and `http://charlie.local:5173/**` (plus the Vercel URL). The `http://192.168.0.65:5173/**` entry was rejected by Supabase even when correctly saved, so the app redirected sign-in to the live Site URL. Diagnose with the error-callback probe: `GET /auth/v1/authorize?provider=google&redirect_to=X`, then `GET /auth/v1/callback?error=access_denied&state=<state from the Location header>`; its `Location` shows the validated redirect (X if accepted, the Site URL if not).
+- The app sends `redirectTo: ${window.location.origin}/` (trailing slash).
 
 ## Known issues (not fixed)
 1. **Friends' names/avatars (fix merged and applied, pending two-account verification).** `profiles` RLS was own-row-only; migration 005 adds `can_view_profile()` and a SELECT policy for pending/accepted friends and plan co-members. Verify with two accounts (friends list, requests, feed, shared plan). Username search still shows blank names for unconnected users by design.

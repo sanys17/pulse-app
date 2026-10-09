@@ -6,7 +6,7 @@ Mobile-first habit/health tracker PWA. React 19, TypeScript, Vite, React Router,
 @handoff.md
 
 ## Commands
-- `npm run dev` start dev server (the user tests on a phone over LAN HTTP)
+- `npm run dev -- --host` start dev server on the fixed port 5173 (`strictPort`). The user tests on an iPhone at **`http://charlie.local:5173`** (the Mac's Bonjour name; use it, not the LAN IP). Google sign-in only returns to the dev server if that exact origin is in Supabase Auth, Redirect URLs (`http://localhost:5173/**` and `http://charlie.local:5173/**`). Supabase rejected the `192.168.0.65:5173` entry for unknown reasons, so don't rely on IPs.
 - `npm run build` runs `tsc -b && vite build`. This is the real check.
 - **Never use `npx tsc --noEmit` to verify.** The root tsconfig has `"files": []` with project references, so it checks nothing and always passes. Use `npx tsc -b`.
 - There is no test runner. Verify with the build, and for UI changes say plainly when you could not test on a device.
@@ -29,7 +29,7 @@ Short version: tokens from `src/index.css` (`--color-*`, `--space-*`, `--radius-
 - localStorage is only used for the Google Calendar token and the one-time migration flag (`src/lib/migrate.ts`). Do not add new app data to localStorage.
 
 ## Supabase migrations
-- Files in `supabase/migrations`, run **manually** by the user in the Supabase SQL Editor, in order (001, 003, 004, 005; 002 is reserved for push notifications). Tell the user which file to run; you cannot run it.
+- Files in `supabase/migrations`, run **manually** by the user in the Supabase SQL Editor, in order (001, 003, 004, 005, 006; 002 is reserved for push notifications). Tell the user which file to run; you cannot run it.
 - RLS pitfalls: an unqualified column inside a policy subquery resolves to the inner table (`pm.plan_id = id` compares to `pm.id`); a policy that queries its own table recurses; an insert with `.select()` needs a SELECT policy the new row already satisfies. For membership checks use a `security definer` helper like `is_plan_member()`.
 - Always filter mutations by `user_id` as well as `id` (defense in depth beyond RLS).
 
