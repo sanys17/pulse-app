@@ -9,6 +9,7 @@ import { PlanCard } from "../components/PlanCard";
 import { FriendsSheet } from "../components/FriendsSheet";
 import { CreatePlanSheet } from "../components/CreatePlanSheet";
 import { SectionHeader } from "../components/SectionHeader";
+import { ConfirmSheet } from "../components/ConfirmSheet";
 import { Avatar } from "../components/Avatar";
 import { dayLabel, localDateKey } from "../lib/format";
 import type { FeedEntry, FriendRequest } from "../types";
@@ -34,6 +35,7 @@ export function Social() {
   const [friendsQuery, setFriendsQuery] = useState("");
   const [showCreatePlan, setShowCreatePlan] = useState(false);
   const [showPast, setShowPast] = useState(false);
+  const [planToDelete, setPlanToDelete] = useState<{ id: string; title: string } | null>(null);
   const [toast, setToast] = useState<{
     text: string;
     error: boolean;
@@ -100,6 +102,15 @@ export function Social() {
 
   const handleDeleteEntry = useCallback(
     (entryId: string) => {
+      // A "created a plan" entry stands for the plan itself: deleting it deletes the plan.
+      const entry = feed.entries.find((e) => e.id === entryId);
+      const planId = entry?.type === "plan_created" ? entry.payload.planId : undefined;
+      const plan = typeof planId === "string" ? plans.plans.find((p) => p.id === planId) : undefined;
+      if (entry?.mine && plan && plan.creatorId === entry.userId) {
+        setPlanToDelete({ id: plan.id, title: plan.title });
+        return;
+      }
+
       const undo = feed.deleteEntry(entryId);
       if (!undo) return;
       showToast("Post deleted", false, {
@@ -110,8 +121,15 @@ export function Social() {
         },
       });
     },
-    [feed, showToast],
+    [feed, plans.plans, showToast],
   );
+
+  const handleConfirmDeletePlan = useCallback(async () => {
+    if (!planToDelete) return;
+    const ok = await plans.deletePlan(planToDelete.id);
+    if (ok) showToast(`Plan "${planToDelete.title}" deleted`);
+    else showToast("Couldn't delete the plan. Try again.", true);
+  }, [planToDelete, plans, showToast]);
 
   const { upcoming, past } = useMemo(() => {
     const today = localDateKey();
@@ -427,6 +445,16 @@ export function Social() {
           onCreate={plans.createPlan}
           onCreated={(title) => showToast(`Plan "${title}" created`)}
           onClose={() => setShowCreatePlan(false)}
+        />
+      )}
+
+      {planToDelete && (
+        <ConfirmSheet
+          title="Delete plan?"
+          message={`"${planToDelete.title}" will be deleted for everyone invited, along with its checklist and RSVPs. This can't be undone.`}
+          confirmLabel="Delete plan"
+          onConfirm={handleConfirmDeletePlan}
+          onClose={() => setPlanToDelete(null)}
         />
       )}
 
