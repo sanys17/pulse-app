@@ -14,7 +14,7 @@ import { useSocial } from "../context/SocialContext";
 import { subscribeToTables } from "../lib/realtime";
 import { AlertPicker } from "../components/AlertPicker";
 import { SectionHeader } from "../components/SectionHeader";
-import { useNotificationPreferences } from "../hooks/useNotificationPreferences";
+import { builtInAlerts } from "../lib/alerts.ts";
 import type { ChecklistItem, PlanMember } from "../types";
 import type { PlanWithMembers } from "../hooks/useSharedPlans";
 
@@ -44,7 +44,6 @@ export function PlanDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { plans } = useSocial();
-  const { prefs } = useNotificationPreferences();
 
   const plan: PlanWithMembers | undefined = plans.plans.find((p) => p.id === id);
 
@@ -261,14 +260,14 @@ export function PlanDetail() {
       </div>
 
       {/* Reminder */}
-      {plan.date && prefs && (
+      {plan.date && (
         <div>
           <SectionHeader title="Remind me" />
           <AlertPicker
             value={myAlerts}
             timed={Boolean(plan.time)}
             label="Reminder"
-            defaultAlerts={plan.time ? prefs.planAlerts : prefs.alldayAlerts}
+            defaultAlerts={plan.alerts ?? builtInAlerts("plan", Boolean(plan.time))}
             onChange={(alerts) => plans.updateMyAlerts(plan.id, alerts)}
           />
         </div>

@@ -4,7 +4,17 @@ export interface Habit {
   icon: string;
   color: HabitColor;
   frequency: "daily" | "weekly";
+  reminderTime: string | null; // "HH:MM", null = no reminder
   createdAt: string;
+}
+
+// What the habit form produces; reminderTime is "HH:MM" or null for no reminder.
+export interface HabitInput {
+  name: string;
+  icon: string;
+  color: HabitColor;
+  frequency: "daily" | "weekly";
+  reminderTime: string | null;
 }
 
 export interface Completion {
@@ -78,6 +88,7 @@ export interface SharedPlan {
   time: string | null;
   location: string | null;
   status: "planning" | "confirmed" | "completed" | "cancelled";
+  alerts: number[] | null; // set by the creator when the plan is made; null = built-in default
   createdAt: string;
   updatedAt: string;
 }

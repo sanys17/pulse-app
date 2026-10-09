@@ -70,6 +70,7 @@ export function useSharedPlans() {
       time: p.time,
       location: p.location,
       status: p.status as SharedPlan["status"],
+      alerts: p.alerts ?? null,
       createdAt: p.created_at,
       updatedAt: p.updated_at,
       members: allMembers
@@ -112,6 +113,7 @@ export function useSharedPlans() {
       date?: string;
       time?: string;
       location?: string;
+      alerts?: number[] | null;
       memberIds: string[];
     }) => {
       if (!user) return;
@@ -125,6 +127,7 @@ export function useSharedPlans() {
           date: data.date ?? null,
           time: data.time ?? null,
           location: data.location ?? null,
+          alerts: data.alerts ?? null,
         })
         .select()
         .single();

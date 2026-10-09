@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { expectRows } from "../lib/monitoring";
 import { useAuth } from "../context/AuthContext";
-import type { Habit, Completion, HabitColor } from "../types";
+import type { Habit, HabitInput, Completion, HabitColor } from "../types";
 
 function toDateKey(d: Date = new Date()): string {
   return d.toISOString().slice(0, 10);
@@ -34,6 +34,7 @@ export function useHabits() {
           icon: h.icon,
           color: h.color as HabitColor,
           frequency: h.frequency as "daily" | "weekly",
+          reminderTime: h.reminder_time ? h.reminder_time.slice(0, 5) : null,
           createdAt: h.created_at.slice(0, 10),
         })));
       }
@@ -63,20 +64,31 @@ export function useHabits() {
   }, [user]);
 
   const addHabit = useCallback(
-    async (data: { name: string; icon: string; color: HabitColor; frequency: "daily" | "weekly" }) => {
+    async (data: Omit<HabitInput, "reminderTime"> & { reminderTime?: string | null }) => {
       if (!user) return;
 
       const tempId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
       const optimistic: Habit = {
         id: tempId,
-        ...data,
+        name: data.name,
+        icon: data.icon,
+        color: data.color,
+        frequency: data.frequency,
+        reminderTime: data.reminderTime ?? null,
         createdAt: toDateKey(),
       };
       setHabits((prev) => [...prev, optimistic]);
 
       const { data: inserted, error } = await supabase
         .from("habits")
-        .insert({ user_id: user.id, name: data.name, icon: data.icon, color: data.color, frequency: data.frequency })
+        .insert({
+          user_id: user.id,
+          name: data.name,
+          icon: data.icon,
+          color: data.color,
+          frequency: data.frequency,
+          reminder_time: data.reminderTime ?? null,
+        })
         .select()
         .single();
 
@@ -100,11 +112,12 @@ export function useHabits() {
     async (id: string, data: Partial<Omit<Habit, "id" | "createdAt">>) => {
       setHabits((prev) => prev.map((h) => (h.id === id ? { ...h, ...data } : h)));
 
-      const updateData: { name?: string; icon?: string; color?: string; frequency?: string } = {};
+      const updateData: { name?: string; icon?: string; color?: string; frequency?: string; reminder_time?: string | null } = {};
       if (data.name !== undefined) updateData.name = data.name;
       if (data.icon !== undefined) updateData.icon = data.icon;
       if (data.color !== undefined) updateData.color = data.color;
       if (data.frequency !== undefined) updateData.frequency = data.frequency;
+      if (data.reminderTime !== undefined) updateData.reminder_time = data.reminderTime;
 
       const { data: updated, error } = await supabase.from("habits").update(updateData).eq("id", id).select("id");
       if (!error) expectRows("habits.update", updated);

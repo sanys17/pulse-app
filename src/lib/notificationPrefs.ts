@@ -1,48 +1,31 @@
-import {
-  DEFAULT_DATE_ONLY_ALERTS,
-  DEFAULT_EVENT_ALERTS,
-  DEFAULT_PLAN_ALERTS,
-  normalizeAlerts,
-} from "./alerts.ts";
-
+// Settings only holds on/off switches (plus the morning summary time, which has no item to hang it on).
+// Alerts and reminder times are chosen per event, plan and habit when they are created.
 export interface NotificationPrefs {
   calendarReminders: boolean;
-  eventAlerts: number[];
   planReminders: boolean;
-  planAlerts: number[];
   planInvites: boolean;
   friendRequests: boolean;
-  alldayAlerts: number[];
   habitReminders: boolean;
-  habitReminderTime: string; // "HH:MM"
   morningSummary: boolean;
   morningSummaryTime: string; // "HH:MM"
 }
 
 export interface PrefsRow {
   calendar_reminders: boolean;
-  event_alerts: number[];
   plan_reminders: boolean;
-  plan_alerts: number[];
   plan_invites: boolean;
   friend_requests: boolean;
-  allday_alerts: number[];
   habit_reminders: boolean;
-  habit_reminder_time: string;
   morning_summary: boolean;
   morning_summary_time: string;
 }
 
 export const DEFAULT_PREFS: NotificationPrefs = {
   calendarReminders: true,
-  eventAlerts: [...DEFAULT_EVENT_ALERTS],
   planReminders: true,
-  planAlerts: [...DEFAULT_PLAN_ALERTS],
   planInvites: true,
   friendRequests: true,
-  alldayAlerts: [...DEFAULT_DATE_ONLY_ALERTS],
   habitReminders: true,
-  habitReminderTime: "20:00",
   morningSummary: true,
   morningSummaryTime: "07:00",
 };
@@ -50,14 +33,10 @@ export const DEFAULT_PREFS: NotificationPrefs = {
 export function rowToPrefs(row: PrefsRow): NotificationPrefs {
   return {
     calendarReminders: row.calendar_reminders,
-    eventAlerts: normalizeAlerts(row.event_alerts),
     planReminders: row.plan_reminders,
-    planAlerts: normalizeAlerts(row.plan_alerts),
     planInvites: row.plan_invites,
     friendRequests: row.friend_requests,
-    alldayAlerts: normalizeAlerts(row.allday_alerts),
     habitReminders: row.habit_reminders,
-    habitReminderTime: row.habit_reminder_time.slice(0, 5),
     morningSummary: row.morning_summary,
     morningSummaryTime: row.morning_summary_time.slice(0, 5),
   };
@@ -65,14 +44,10 @@ export function rowToPrefs(row: PrefsRow): NotificationPrefs {
 
 const COLUMN: Record<keyof NotificationPrefs, keyof PrefsRow> = {
   calendarReminders: "calendar_reminders",
-  eventAlerts: "event_alerts",
   planReminders: "plan_reminders",
-  planAlerts: "plan_alerts",
   planInvites: "plan_invites",
   friendRequests: "friend_requests",
-  alldayAlerts: "allday_alerts",
   habitReminders: "habit_reminders",
-  habitReminderTime: "habit_reminder_time",
   morningSummary: "morning_summary",
   morningSummaryTime: "morning_summary_time",
 };

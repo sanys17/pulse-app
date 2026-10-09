@@ -15,7 +15,7 @@ All on `master`, deployed on Vercel, `npm run build` passes. No test runner exis
 | Friends' profile visibility (migration 005) | Merged (PR #6). `005` run in Supabase by the user; names/avatars not separately confirmed |
 | Friend requests: toast, Sent Requests section, live updates (migration 006), pinned dev port, `.local` host | In PR #8 (open). `006` and `007` are applied, so live updates are on for friendships, plans, members, checklist and feed (shared helper `src/lib/realtime.ts`); friendships also polls every 20s as a fallback. Own-data tables (habits, tasks, events) are not live yet: a refetch triggered by the user's own tap can revert a fast second tap, so it needs an echo guard first |
 | Social tab redesign: needs-you requests, upcoming plans, friends' activity with one-tap cheers, owner deletes (feed entries with Undo; a plan's activity entry deletes the plan after a confirm), drag-to-dismiss sheets, 44px targets, tokens | Done, merged (PR #10). `008_feed_reactions.sql` run by the user. Not yet confirmed end to end on a device |
-| **Push notifications** | **Built on branch `feat/push-notifications`, not merged or switched on.** Spec `docs/superpowers/specs/2026-10-08-push-notifications-design.md`, plan `docs/superpowers/plans/2026-10-09-push-notifications.md`. Needs the steps in `docs/notifications-runbook.md` (keys, migrations 009 and 010, scheduler, heartbeat) before anything is sent; not yet tested on a device |
+| **Push notifications** | **Live** (PR #13). Server sender via Supabase pg_cron every minute (heartbeat in Better Stack), custom service worker, Settings section. Verified: scheduler returns 200 and a test notification reaches the iPhone Home Screen app. Branch `feat/per-item-reminders` replaces global alert/time settings with per-event, per-plan and per-habit reminders (needs migration 011, run right before deploying it). Not yet confirmed one by one: habit, event, plan, invitation, friend request and morning notifications on a real device. Runbook: `docs/notifications-runbook.md` |
 
 ## Supabase (user runs SQL manually in the SQL Editor)
 Applied (evidenced by plans working in the app): `001_initial_schema.sql`, `003_social.sql`, `004_fix_plan_policies.sql`., `005_friend_profile_visibility.sql` (run by the user, 2026-10-09). `006_friendships_realtime.sql` and `007_social_realtime.sql` (run by the user, 2026-10-09; verified working with two accounts), `008_feed_reactions.sql` (run by the user). Not confirmed from the repo: whether Google OAuth is configured in Supabase and whether `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set in Vercel (the app throws on startup without them). Ask the user if sign-in or a deploy misbehaves.
@@ -44,7 +44,7 @@ Better Stack error tracking (US region; EU needs a paid plan), app `Pulse-web`. 
 ## Next steps (suggested order)
 1. Live updates for own-data tables (habits, completions, tasks, calendar events) with an echo guard.
 2. Design cleanup: tokens for accent/status colors, one glass recipe, contrast fixes.
-3. Switch push notifications on: merge the branch, then follow `docs/notifications-runbook.md` and verify on an iPhone Home Screen app (the service worker does not run in `npm run dev`).
+3. Finish verifying push notifications on a real iPhone: habit, event (two alerts), plan, invitation, friend request, morning summary (runbook section 7).
 4. Add error surfacing to hooks (issue 3).
 
 ## Working with this repo

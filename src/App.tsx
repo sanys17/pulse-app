@@ -19,7 +19,7 @@ import { Calendar } from "./pages/Calendar";
 import { Tasks } from "./pages/Tasks";
 import { Settings } from "./pages/Settings";
 import { SignIn } from "./pages/SignIn";
-import type { Habit, HabitColor } from "./types";
+import type { Habit, HabitInput } from "./types";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -54,24 +54,14 @@ function AppContent() {
     setEditingHabit(habit);
   };
 
-  const handleSaveEdit = (data: {
-    name: string;
-    icon: string;
-    color: HabitColor;
-    frequency: "daily" | "weekly";
-  }) => {
+  const handleSaveEdit = (data: HabitInput) => {
     if (editingHabit) {
       updateHabit(editingHabit.id, data);
       setEditingHabit(null);
     }
   };
 
-  const handleSaveNew = (data: {
-    name: string;
-    icon: string;
-    color: HabitColor;
-    frequency: "daily" | "weekly";
-  }) => {
+  const handleSaveNew = (data: HabitInput) => {
     addHabit(data);
     setShowNewHabit(false);
   };

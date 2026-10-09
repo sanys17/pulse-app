@@ -21,7 +21,8 @@ Order matters. Do these once; after that the feature is live for every user who 
 ## 3. Database (Supabase SQL Editor, in this order)
 1. `supabase/migrations/009_push_notifications.sql`
 2. `supabase/migrations/010_pending_notifications.sql`
-3. `supabase/tests/pending_notifications.test.sql`: the last result must read `ALL TESTS PASSED`.
+3. `supabase/migrations/011_per_item_reminders.sql` (per-item reminders; run it **right before** the deploy that contains it, because the older app version reads columns it removes)
+4. `supabase/tests/pending_notifications.test.sql`: the last result must read `ALL TESTS PASSED`.
 
 ## 4. Deploy, then check the route is alive
 After the PR is merged and the deploy is green:
@@ -39,7 +40,7 @@ Expected: `401` with `{"error":"unauthorized"}`. (`500 Cannot find module` means
 3. **Send a test**: a notification arrives within seconds.
 
 ## 7. Real checks
-- Habit: set the habit reminder to 2 minutes from now (with an unfinished habit). Lock the phone. It arrives; tapping opens Habits.
+- Habit: edit a habit and set its Reminder time to 2 minutes from now. Lock the phone. It arrives (habits with the same time arrive as one notification); tapping opens Habits.
 - Event: add an event 20 minutes from now with Alert "15 minutes before". It arrives; tapping opens Calendar.
 - Second alert: add an event an hour away with "30 minutes before" and a second alert "At time of event"; both arrive.
 - Plan: create a plan with a friend for tomorrow; the friend gets an invitation notification; both get the reminder at their own default or "Remind me" choice.

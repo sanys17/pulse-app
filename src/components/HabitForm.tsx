@@ -1,17 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { X } from "@phosphor-icons/react";
 import { HABIT_COLORS, HABIT_ICONS } from "../types";
-import type { Habit, HabitColor } from "../types";
+import type { Habit, HabitColor, HabitInput } from "../types";
+import { SelectField } from "./SelectField";
+import { timeOptions } from "../lib/notificationPrefs.ts";
 import { IconPicker } from "./IconPicker";
 
 interface HabitFormProps {
   habit?: Habit;
-  onSave: (data: {
-    name: string;
-    icon: string;
-    color: HabitColor;
-    frequency: "daily" | "weekly";
-  }) => void;
+  onSave: (data: HabitInput) => void;
   onDelete?: () => void;
   onClose: () => void;
 }
@@ -23,6 +20,7 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
   const [frequency, setFrequency] = useState<"daily" | "weekly">(
     habit?.frequency ?? "daily"
   );
+  const [reminderTime, setReminderTime] = useState(habit?.reminderTime ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const colorSet = HABIT_COLORS[color];
@@ -50,7 +48,7 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onSave({ name: name.trim(), icon, color, frequency });
+    onSave({ name: name.trim(), icon, color, frequency, reminderTime: reminderTime || null });
   };
 
   const handleDelete = () => {
@@ -287,6 +285,29 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label
+              style={{
+                display: "block",
+                fontSize: "var(--text-sm)",
+                fontWeight: 500,
+                color: "var(--color-text-secondary)",
+                marginBottom: "var(--space-2)",
+              }}
+            >
+              Reminder
+            </label>
+            <SelectField
+              label="Reminder time"
+              value={reminderTime}
+              options={[{ value: "", label: "No reminder" }, ...timeOptions(15)]}
+              onChange={setReminderTime}
+            />
+            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-tertiary)", marginTop: "var(--space-1)" }}>
+              We'll remind you at this time if it isn't done yet.
+            </p>
           </div>
         </div>
 

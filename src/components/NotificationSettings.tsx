@@ -7,7 +7,6 @@ import type { PushStatus } from "../lib/pushSupport.ts";
 import { timeOptions } from "../lib/notificationPrefs.ts";
 import { useNotificationPreferences } from "../hooks/useNotificationPreferences";
 import { Toggle } from "./Toggle";
-import { AlertPicker } from "./AlertPicker";
 import { SelectField } from "./SelectField";
 
 const card: React.CSSProperties = {
@@ -202,20 +201,16 @@ export function NotificationSettings() {
         <div style={card}>
           <Row
             title="Calendar events"
-            detail="Reminders for your own events"
+            detail="Reminders for your events. Choose the alert when you add an event."
             checked={prefs.calendarReminders}
             onToggle={(v) => save({ calendarReminders: v })}
-          >
-            <AlertPicker value={prefs.eventAlerts} timed onChange={(v) => save({ eventAlerts: v ?? [] })} />
-          </Row>
+          />
           <Row
             title="Plans"
-            detail="Reminders for plans you're in"
+            detail="Reminders for plans you're in. Set when a plan is created; change yours in the plan."
             checked={prefs.planReminders}
             onToggle={(v) => save({ planReminders: v })}
-          >
-            <AlertPicker value={prefs.planAlerts} timed onChange={(v) => save({ planAlerts: v ?? [] })} />
-          </Row>
+          />
           <Row
             title="Plan invitations"
             detail="When someone invites you to a plan"
@@ -228,31 +223,12 @@ export function NotificationSettings() {
             checked={prefs.friendRequests}
             onToggle={(v) => save({ friendRequests: v })}
           />
-          <div style={{ padding: "var(--space-2) 0", borderTop: "1px solid var(--color-border)" }}>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>Items without a time</div>
-            <div style={{ fontSize: 13, color: "var(--color-text-tertiary)", marginBottom: "var(--space-2)" }}>
-              Events and plans that only have a date
-            </div>
-            <AlertPicker
-              value={prefs.alldayAlerts}
-              timed={false}
-              label="Alert for items without a time"
-              onChange={(v) => save({ alldayAlerts: v ?? [] })}
-            />
-          </div>
           <Row
             title="Habit reminders"
-            detail="Unfinished habits for today"
+            detail="Each habit has its own time. Set it when you create the habit."
             checked={prefs.habitReminders}
             onToggle={(v) => save({ habitReminders: v })}
-          >
-            <SelectField
-              label="Habit reminder time"
-              value={prefs.habitReminderTime}
-              options={times}
-              onChange={(v) => save({ habitReminderTime: v })}
-            />
-          </Row>
+          />
           <Row
             title="Morning summary"
             detail="Today's events and habits"

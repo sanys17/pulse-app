@@ -1,8 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Check } from "@phosphor-icons/react";
+import { builtInAlerts } from "../lib/alerts.ts";
 import type { Friend } from "../types";
 import { Sheet } from "./Sheet";
 import { Avatar } from "./Avatar";
+import { AlertPicker } from "./AlertPicker";
 
 interface CreatePlanSheetProps {
   friends: Friend[];
@@ -12,6 +14,7 @@ interface CreatePlanSheetProps {
     date?: string;
     time?: string;
     location?: string;
+    alerts?: number[] | null;
     memberIds: string[];
   }) => Promise<string | undefined>;
   onClose: () => void;
@@ -37,6 +40,12 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [location, setLocation] = useState("");
+  // Chosen here, saved on the plan; each member can still change their own in Plan Detail.
+  const [alerts, setAlerts] = useState<number[]>(builtInAlerts("plan", false));
+  const hasTime = time !== "";
+  useEffect(() => {
+    setAlerts(builtInAlerts("plan", hasTime));
+  }, [hasTime]);
   const [selectedFriends, setSelectedFriends] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -60,6 +69,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
       date: date || undefined,
       time: time || undefined,
       location: location.trim() || undefined,
+      alerts: date ? alerts : null,
       memberIds: [...selectedFriends],
     });
     setSubmitting(false);
@@ -69,7 +79,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
     }
     onCreated?.(title.trim());
     onClose();
-  }, [title, description, date, time, location, selectedFriends, submitting, onCreate, onClose, onCreated]);
+  }, [title, description, date, time, location, alerts, selectedFriends, submitting, onCreate, onClose, onCreated]);
 
   const canCreate = title.trim().length > 0 && !submitting;
 
@@ -141,6 +151,15 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
           aria-label="Location"
           style={inputStyle}
         />
+
+        {date && (
+          <div>
+            <div style={{ fontSize: 13, color: "var(--color-text-tertiary)", marginBottom: "var(--space-1)" }}>
+              Remind everyone
+            </div>
+            <AlertPicker value={alerts} onChange={(v) => setAlerts(v ?? [])} timed={hasTime} label="Plan alert" />
+          </div>
+        )}
 
         {friends.length > 0 && (
           <div>
