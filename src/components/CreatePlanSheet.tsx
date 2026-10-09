@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect } from "react";
-import { Check } from "@phosphor-icons/react";
+import { Check, CalendarBlank, Clock } from "@phosphor-icons/react";
 import { builtInAlerts } from "../lib/alerts.ts";
 import type { Friend } from "../types";
 import { Sheet } from "./Sheet";
 import { Avatar } from "./Avatar";
 import { AlertPicker } from "./AlertPicker";
+import { Toggle } from "./Toggle";
 
 interface CreatePlanSheetProps {
   friends: Friend[];
@@ -15,6 +16,7 @@ interface CreatePlanSheetProps {
     time?: string;
     location?: string;
     alerts?: number[] | null;
+    open?: boolean;
     memberIds: string[];
   }) => Promise<string | undefined>;
   onClose: () => void;
@@ -47,6 +49,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
     setAlerts(builtInAlerts("plan", hasTime));
   }, [hasTime]);
   const [selectedFriends, setSelectedFriends] = useState<Set<string>>(new Set());
+  const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -70,6 +73,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
       time: time || undefined,
       location: location.trim() || undefined,
       alerts: date ? alerts : null,
+      open,
       memberIds: [...selectedFriends],
     });
     setSubmitting(false);
@@ -79,7 +83,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
     }
     onCreated?.(title.trim());
     onClose();
-  }, [title, description, date, time, location, alerts, selectedFriends, submitting, onCreate, onClose, onCreated]);
+  }, [title, description, date, time, location, alerts, open, selectedFriends, submitting, onCreate, onClose, onCreated]);
 
   const canCreate = title.trim().length > 0 && !submitting;
 
@@ -105,14 +109,20 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
           style={{ ...inputStyle, height: "auto", padding: "var(--space-3)", resize: "none" }}
         />
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
           {(
             [
-              { type: "date", label: "Date", value: date, set: setDate },
-              { type: "time", label: "Time", value: time, set: setTime },
+              { type: "date", label: "Date", Icon: CalendarBlank, value: date, set: setDate },
+              { type: "time", label: "Time", Icon: Clock, value: time, set: setTime },
             ] as const
           ).map((f) => (
-            <div key={f.type} style={{ position: "relative" }}>
+            <div key={f.type} style={{ position: "relative", width: "100%", overflow: "hidden", borderRadius: "var(--radius-sm)" }}>
+              <f.Icon
+                size={18}
+                aria-hidden="true"
+                color="var(--color-text-tertiary)"
+                style={{ position: "absolute", left: "var(--space-3)", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+              />
               <input
                 type={f.type}
                 value={f.value}
@@ -120,7 +130,12 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
                 aria-label={f.label}
                 style={{
                   ...inputStyle,
+                  paddingLeft: 40,
                   colorScheme: "dark",
+                  minWidth: 0,
+                  maxWidth: "100%",
+                  WebkitAppearance: "none",
+                  appearance: "none",
                   color: f.value ? "var(--color-text)" : "transparent",
                 }}
               />
@@ -128,7 +143,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
                 <span
                   style={{
                     position: "absolute",
-                    left: "var(--space-3)",
+                    left: 40,
                     top: "50%",
                     transform: "translateY(-50%)",
                     fontSize: 15,
@@ -162,6 +177,26 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
         )}
 
         {friends.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "var(--space-3)",
+              minHeight: 52,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Open to all friends</div>
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--color-text-tertiary)" }}>
+                Any friend can join, up to 20 people.
+              </div>
+            </div>
+            <Toggle checked={open} onChange={setOpen} label="Open to all friends" />
+          </div>
+        )}
+
+        {friends.length > 0 && (
           <div>
             <h3
               style={{
@@ -175,7 +210,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
                 alignItems: "center",
               }}
             >
-              Invite friends{selectedFriends.size > 0 ? ` · ${selectedFriends.size}` : ""}
+              {open ? "Also invite directly" : "Invite friends"}{selectedFriends.size > 0 ? ` · ${selectedFriends.size}` : ""}
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
               {friends.map((f) => {

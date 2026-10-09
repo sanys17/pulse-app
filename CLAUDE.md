@@ -46,7 +46,7 @@ Short version: tokens from `src/index.css` (`--color-*`, `--space-*`, `--radius-
 
 ## Supabase migrations
 - Live updates: use `subscribeToTables([...], refetch)` from `src/lib/realtime.ts` in a hook's effect (debounced, refetches after a reconnect). The table must be in the `supabase_realtime` publication via a migration. Social tables are live; own-data tables (habits, completions, tasks, calendar_events) are not yet.
-- Files in `supabase/migrations`, run **manually** by the user in the Supabase SQL Editor, in order (001, 003 to 011; there is no 002). Tell the user which file to run; you cannot run it.
+- Files in `supabase/migrations`, run **manually** by the user in the Supabase SQL Editor, in order (001, 003 to 012; there is no 002). Tell the user which file to run; you cannot run it.
 - RLS pitfalls: an unqualified column inside a policy subquery resolves to the inner table (`pm.plan_id = id` compares to `pm.id`); a policy that queries its own table recurses; an insert with `.select()` needs a SELECT policy the new row already satisfies. For membership checks use a `security definer` helper like `is_plan_member()`.
 - Always filter mutations by `user_id` as well as `id` (defense in depth beyond RLS).
 

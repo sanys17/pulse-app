@@ -188,6 +188,7 @@ export type Database = {
           created_at: string;
           updated_at: string;
           alerts: number[] | null;
+          open: boolean;
         };
         Insert: {
           id?: string;
@@ -199,6 +200,7 @@ export type Database = {
           location?: string | null;
           status?: string;
           alerts?: number[] | null;
+          open?: boolean;
         };
         Update: {
           title?: string;
@@ -209,6 +211,7 @@ export type Database = {
           status?: string;
           updated_at?: string;
           alerts?: number[] | null;
+          open?: boolean;
         };
         Relationships: [];
       };
@@ -220,6 +223,7 @@ export type Database = {
           rsvp: string;
           joined_at: string;
           alerts: number[] | null;
+          self_joined: boolean;
         };
         Insert: {
           id?: string;

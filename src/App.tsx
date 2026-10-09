@@ -4,11 +4,12 @@ import { BottomNav } from "./components/BottomNav";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { HabitsProvider, useHabitsContext } from "./context/HabitsContext";
 import { useSocial } from "./context/SocialContext";
-import { TasksProvider } from "./context/TasksContext";
+import { TasksProvider, useTasksContext } from "./context/TasksContext";
 import { CalendarEventsProvider } from "./context/CalendarEventsContext";
 import { SocialProvider } from "./context/SocialContext";
 import { HabitForm } from "./components/HabitForm";
 import { QuickLog } from "./components/QuickLog";
+import { AddTaskSheet } from "./components/AddTaskSheet";
 import { useTheme } from "./hooks/useTheme";
 import { usePushSync } from "./hooks/usePushSync";
 import { Home } from "./pages/Home";
@@ -45,10 +46,12 @@ function AppContent() {
   useTheme();
   usePushSync();
   const { addHabit, updateHabit, deleteHabit } = useHabitsContext();
+  const { addTask } = useTasksContext();
   const { friendships } = useSocial();
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [showNewHabit, setShowNewHabit] = useState(false);
   const [showQuickLog, setShowQuickLog] = useState(false);
+  const [showNewTask, setShowNewTask] = useState(false);
 
   const handleEditFromHome = (habit: Habit) => {
     setEditingHabit(habit);
@@ -82,7 +85,7 @@ function AppContent() {
           margin: "0 auto",
           minHeight: "100dvh",
           padding: "calc(env(safe-area-inset-top, 0px) + var(--space-6)) var(--space-4)",
-          paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))",
+          paddingBottom: "calc(var(--nav-bottom) + 60px + env(safe-area-inset-bottom, 0px))",
         }}
       >
         <Routes>
@@ -98,6 +101,7 @@ function AppContent() {
 
       <BottomNav
         onAddHabit={() => setShowNewHabit(true)}
+        onAddTask={() => setShowNewTask(true)}
         onQuickLog={() => setShowQuickLog(true)}
         pendingRequests={friendships.pendingIncoming.length}
       />
@@ -117,6 +121,8 @@ function AppContent() {
           onClose={() => setShowNewHabit(false)}
         />
       )}
+
+      {showNewTask && <AddTaskSheet onAdd={addTask} onClose={() => setShowNewTask(false)} />}
 
       {showQuickLog && (
         <QuickLog onClose={() => setShowQuickLog(false)} />
