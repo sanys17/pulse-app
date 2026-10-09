@@ -7,7 +7,7 @@
 ## What the user asked for
 
 - Notifications that are **reliable and correct**, arriving when the app is closed.
-- Kinds: calendar event reminders, **plan reminders and plan invitations**, habit reminders, morning summary.
+- Kinds: calendar event reminders, **plan reminders and plan invitations**, **friend requests**, habit reminders, morning summary.
 - **Alert timing follows Apple Calendar**: at time of event, 5, 10, 15, 30 minutes, 1 hour, 2 hours, 1 day, 2 days, 1 week before; up to two alerts per item; settable as a default in Settings and per item.
 - **Notification settings inside the app's Settings.**
 - Scheduler decision (made): **Supabase pg_cron calls a Vercel API route every minute.** Free, works on Vercel Hobby, lives in the existing repo/deploy.
@@ -70,13 +70,14 @@ Decisions:
 - `profiles.timezone text not null default 'UTC'`.
 - `calendar_events.alerts int[]` and `plan_members.alerts int[]`, both nullable (null = use the user's default; `'{}'` = none).
 - `push_subscriptions(id, user_id, endpoint unique, p256dh, auth, user_agent, created_at)`. RLS: select/insert/delete own rows; no update (delete + insert).
-- `notification_preferences(user_id unique, calendar_reminders default true, event_alerts int[] default '{15}', plan_reminders default true, plan_alerts int[] default '{60}', plan_invites default true, allday_alerts int[] default '{0}', habit_reminders default true, habit_reminder_time default '20:00', morning_summary default true, morning_summary_time default '07:00', created_at)`. RLS: select/insert/update own row. **Backfill** a row for every existing profile and add a trigger so new profiles get one. The client also upserts its row, so a missing row can never block Settings.
+- `notification_preferences(user_id unique, calendar_reminders default true, event_alerts int[] default '{15}', plan_reminders default true, plan_alerts int[] default '{60}', plan_invites default true, friend_requests default true, allday_alerts int[] default '{0}', habit_reminders default true, habit_reminder_time default '20:00', morning_summary default true, morning_summary_time default '07:00', created_at)`. RLS: select/insert/update own row. **Backfill** a row for every existing profile and add a trigger so new profiles get one. The client also upserts its row, so a missing row can never block Settings.
 - `notification_log(user_id, kind, reference_id, sent_at, primary key (user_id, kind, reference_id))`. RLS on, no policies (server only). A daily pg_cron job deletes rows older than 3 days.
 - `pending_notifications(p_now timestamptz default now())` returns `(user_id, kind, reference_id, title, body, url, tag)`, `security definer`, with `revoke execute ... from public, anon, authenticated` so only the service role can call it (otherwise any signed-in user could read other users' reminders). `p_now` lets us test with a fake clock.
 
 Rules inside `pending_notifications`, per user with at least one subscription and the kind enabled (local = `p_now at time zone profiles.timezone`):
 
 - **calendar** and **plan** reminders share one rule. Items: the user's `calendar_events`, and `shared_plans` where the user is a member whose `rsvp` is not `declined` and the plan status is not `cancelled` or `completed` and has a `date`. For each item take `coalesce(item.alerts, default)`, where the default is `event_alerts` / `plan_alerts` for timed items and `allday_alerts` for date-only items. For each offset: `start = (date + time) at time zone timezone` (date-only: `date + 09:00`), `alert_time = start - offset`; due when `alert_time <= p_now < least(alert_time + 15 min, start)` (offset 0: `< start + 15 min`). `reference_id = kind || ':' || item id || ':' || start || ':' || offset`, so a different offset or a rescheduled item alerts again but the same alert never repeats. Body: `"<title> at HH24:MI"` (plans: `"<title> with Anna, Tom"` up to 2 names); title carries the lead (`In 15 min`, `Now`, `Tomorrow`). Urls `/calendar` and `/social/plan/<id>`.
+- **friend request**: a `friendships` row where the user is the addressee, `status = 'pending'`, created in the last 15 minutes, `friend_requests` on. Body `"Anna wants to be friends"` (name from `profiles`, falling back to `@username`), url `/social`. `reference_id = friendship id`. Only the recipient is notified; the requester gets no push.
 - **plan invitation**: a `plan_members` row for the user, `rsvp = 'pending'`, created in the last 15 minutes, where the user is not the creator, `plan_invites` on. Body `"Anna invited you to <title>"`, url `/social/plan/<id>`. `reference_id = plan id`.
 - **habit**: `local_date + habit_reminder_time <= local_now < that + 30 minutes` (catch-up window, no midnight wrap bug). Incomplete habits = daily habits, plus weekly habits **on Monday** (mirrors `todaysHabits` in the app), with no completion for `local_date`. Skip if none. Body lists up to 3 names then `+N more`. `reference_id = local_date`, url `/habits`.
 - **morning**: same window using `morning_summary_time`. Counts today's `calendar_events` and the incomplete habits above. Skip if both are 0. Body `"2 events today · 5 habits to go"`, url `/`.
@@ -122,6 +123,7 @@ When `on`, three rows, each with a switch and its own control:
 
 - **Calendar events**: switch, then **Alert** and **Second alert** selects with the Apple options above.
 - **Plans**: switch for reminders (**Alert**, **Second alert**) and a separate switch for **invitations**.
+- **Friend requests**: switch.
 - **Items without a time**: one select (On the day at 9:00 AM, 1 day before, 2 days before, 1 week before).
 - **Habit reminders**: switch and time select (15-minute steps).
 - **Morning summary**: switch and time select (15-minute steps).
@@ -142,7 +144,7 @@ Plus **Send a test notification** (calls `api/send-test-notification`, shows a t
 
 ## Testing (no test runner exists)
 
-- **SQL:** run `select * from pending_notifications('<fake time>')` against fixtures (events and plans, a habit, a user in `Europe/Prague`) around the boundaries: each Apple offset, two alerts on one item, date-only item at 09:00 and the day before, offset 0 window, an alert after the item started (must not fire), declined/cancelled plan, per-item override vs default, a plan invitation, midnight, Monday weekly habit, all habits done, rescheduled event.
+- **SQL:** run `select * from pending_notifications('<fake time>')` against fixtures (events and plans, a habit, a user in `Europe/Prague`) around the boundaries: each Apple offset, two alerts on one item, date-only item at 09:00 and the day before, offset 0 window, an alert after the item started (must not fire), declined/cancelled plan, per-item override vs default, a plan invitation, a friend request (and none once it is accepted or declined, or after 15 minutes), midnight, Monday weekly habit, all habits done, rescheduled event.
 - **Route:** call with and without the secret; with a bad token; with a dead subscription (expect it deleted).
 - **End to end:** enable on a real iPhone Home Screen app, send a test, then set the habit time one minute ahead and lock the phone; tap each notification type and check the destination; disable and confirm no more arrive.
 - Verification by build (`npx tsc -b`) for the TypeScript parts. I cannot run SQL against Supabase myself, so SQL checks are done by the user in the SQL editor.
@@ -154,4 +156,4 @@ Changed: `vite.config.ts`, `src/pages/Settings.tsx`, `src/pages/Calendar.tsx`, `
 
 ## Out of scope
 
-Friend-request notifications (cheap to add later with the same engine), cheer notifications, plan change/cancel notifications, Google Calendar events (integration not connected), quiet hours (use OS Focus), snooze, per-device preferences, rich actions/images, email, delivery analytics.
+"Request accepted" notifications (cheap to add later), cheer notifications, plan change/cancel notifications, Google Calendar events (integration not connected), quiet hours (use OS Focus), snooze, per-device preferences, rich actions/images, email, delivery analytics.
