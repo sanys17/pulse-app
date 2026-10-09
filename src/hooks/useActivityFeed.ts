@@ -51,6 +51,7 @@ export function useActivityFeed() {
       const profileIds = new Set(rows.map((r) => r.user_id));
       for (const ids of reactorsByEntry.values()) for (const id of ids) profileIds.add(id);
       const profileMap = new Map<string, { name: string; avatarUrl: string | null }>();
+      const usernameMap = new Map<string, string>();
       if (profileIds.size > 0) {
         const { data: profiles } = await supabase
           .from("profiles")
@@ -59,6 +60,11 @@ export function useActivityFeed() {
         for (const p of profiles ?? []) {
           profileMap.set(p.user_id, { name: p.name ?? "", avatarUrl: p.avatar_url });
         }
+        const { data: handles } = await supabase
+          .from("usernames")
+          .select("user_id, username")
+          .in("user_id", [...profileIds]);
+        for (const u of handles ?? []) usernameMap.set(u.user_id, u.username);
       }
 
       const all: FeedEntry[] = rows.map((r) => {
@@ -71,6 +77,7 @@ export function useActivityFeed() {
           payload: (r.payload as Record<string, unknown>) ?? {},
           createdAt: r.created_at,
           userName: profileMap.get(r.user_id)?.name ?? "",
+          userUsername: usernameMap.get(r.user_id) ?? "",
           userAvatar: profileMap.get(r.user_id)?.avatarUrl ?? null,
           mine: r.user_id === user.id,
           cheers: others.length + (mine ? 1 : 0),

@@ -9,6 +9,7 @@ import {
   Trash,
   Check,
 } from "@phosphor-icons/react";
+import { ConfirmSheet } from "../components/ConfirmSheet";
 import { useAuth } from "../context/AuthContext";
 import { useSocial } from "../context/SocialContext";
 import { subscribeToTables } from "../lib/realtime";
@@ -42,6 +43,7 @@ function formatTime(timeStr: string | null): string {
 export function PlanDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const { user } = useAuth();
   const { plans } = useSocial();
 
@@ -99,6 +101,13 @@ export function PlanDetail() {
     },
     [id, plans],
   );
+
+  const handleLeavePlan = useCallback(async () => {
+    if (!id) return;
+    const ok = await plans.leavePlan(id);
+    if (ok) navigate("/social", { replace: true, state: { toast: "You left the plan" } });
+    else setDeleteError("Couldn't leave the plan. Check your connection and try again.");
+  }, [id, plans, navigate]);
 
   const handleDeletePlan = useCallback(async () => {
     if (!id || deleting) return;
@@ -324,8 +333,13 @@ export function PlanDetail() {
                   (m.name || m.username).charAt(0).toUpperCase()
                 )}
               </div>
-              <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>
-                {m.name || m.username}
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 14, fontWeight: 500 }}>{m.name || m.username}</span>
+                {m.name && m.username && (
+                  <span style={{ display: "block", fontSize: "var(--text-xs)", color: "var(--color-text-tertiary)" }}>
+                    @{m.username}
+                  </span>
+                )}
               </span>
               <span
                 style={{
@@ -478,6 +492,44 @@ export function PlanDetail() {
           </div>
         )}
       </div>
+
+      {plan.creatorId !== user?.id && (
+        <div style={{ paddingTop: "var(--space-2)" }}>
+          <button
+            className="press"
+            onClick={() => setConfirmLeave(true)}
+            style={{
+              width: "100%",
+              height: 44,
+              background: "transparent",
+              border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius-sm)",
+              color: "var(--color-danger)",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Leave plan
+          </button>
+          {deleteError && (
+            <p role="alert" style={{ fontSize: "var(--text-sm)", color: "var(--color-danger)", marginTop: "var(--space-2)" }}>
+              {deleteError}
+            </p>
+          )}
+        </div>
+      )}
+
+      {confirmLeave && (
+        <ConfirmSheet
+          title="Leave plan?"
+          message={`"${plan.title}" will disappear from your plans. Only the creator can invite you back.`}
+          confirmLabel="Leave plan"
+          onConfirm={handleLeavePlan}
+          onClose={() => setConfirmLeave(false)}
+        />
+      )}
 
       {plan.creatorId === user?.id && (
         <div style={{ paddingTop: "var(--space-2)" }}>

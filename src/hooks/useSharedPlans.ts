@@ -195,6 +195,24 @@ export function useSharedPlans() {
     [user],
   );
 
+  // A member (not the creator) removes themselves from a plan.
+  const leavePlan = useCallback(
+    async (planId: string): Promise<boolean> => {
+      if (!user) return false;
+      const { data, error } = await supabase
+        .from("plan_members")
+        .delete()
+        .eq("plan_id", planId)
+        .eq("user_id", user.id)
+        .select("id");
+      if (error || !data || data.length === 0) return false;
+      fetchSeq.current++;
+      setPlans((prev) => prev.filter((p) => p.id !== planId));
+      return true;
+    },
+    [user],
+  );
+
   // Each member has their own alert for a plan (like shared events in Apple Calendar).
   const updateMyAlerts = useCallback(
     async (planId: string, alerts: number[] | null): Promise<boolean> => {
@@ -292,6 +310,7 @@ export function useSharedPlans() {
     loading,
     createPlan,
     deletePlan,
+    leavePlan,
     updateRsvp,
     updateMyAlerts,
     fetchChecklist,

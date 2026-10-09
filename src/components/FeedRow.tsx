@@ -40,7 +40,7 @@ export function FeedRow({ entry, onCheer, onDelete }: FeedRowProps) {
   const config = feedConfig[entry.type];
   const Icon = config.icon;
   const [popKey, setPopKey] = useState(0);
-  const name = entry.mine ? "You" : entry.userName || "A friend";
+  const name = entry.mine ? "You" : entry.userName || entry.userUsername || "A friend";
 
   const handleCheer = () => {
     if (!entry.cheeredByMe) setPopKey((k) => k + 1);
@@ -83,6 +83,7 @@ export function FeedRow({ entry, onCheer, onDelete }: FeedRowProps) {
           <span style={{ fontWeight: 600, color: "var(--color-text)" }}>{name}</span> {config.label(entry.payload)}
         </div>
         <div style={{ fontSize: "var(--text-xs)", color: "var(--color-text-tertiary)", marginTop: 2 }}>
+          {!entry.mine && entry.userName && entry.userUsername && `@${entry.userUsername} · `}
           {timeAgo(entry.createdAt)}
           {entry.mine && entry.cheeredBy.length > 0 && (
             <span style={{ color: "var(--color-accent)", fontWeight: 600 }}>

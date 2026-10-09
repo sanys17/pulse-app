@@ -72,6 +72,7 @@ export interface FeedEntry {
   payload: Record<string, unknown>;
   createdAt: string;
   userName: string;
+  userUsername: string;
   userAvatar: string | null;
   mine: boolean;
   cheers: number;
