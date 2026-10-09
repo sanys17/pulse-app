@@ -95,6 +95,13 @@ export function Social() {
 
   const feedGroups = useMemo(() => groupByDay(feed.entries), [feed.entries]);
 
+  // Someone cheered one of your entries while you were here
+  const cheerKey = feed.incomingCheer?.key;
+  const cheerText = feed.incomingCheer?.text;
+  useEffect(() => {
+    if (cheerKey && cheerText) showToast(cheerText);
+  }, [cheerKey, cheerText, showToast]);
+
   if (username.loading) {
     return (
       <div
@@ -265,7 +272,7 @@ export function Social() {
 
       {/* Activity */}
       <section>
-        <SectionHeader title="Friends' activity" />
+        <SectionHeader title="Activity" />
         {feed.loading ? (
           <div style={{ display: "flex", justifyContent: "center", padding: "var(--space-8)" }}>
             <SpinnerGap size={20} weight="bold" className="spin" color="var(--color-text-tertiary)" />

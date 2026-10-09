@@ -39,7 +39,7 @@ export function FeedRow({ entry, onCheer }: FeedRowProps) {
   const config = feedConfig[entry.type];
   const Icon = config.icon;
   const [popKey, setPopKey] = useState(0);
-  const name = entry.userName || "A friend";
+  const name = entry.mine ? "You" : entry.userName || "A friend";
 
   const handleCheer = () => {
     if (!entry.cheeredByMe) setPopKey((k) => k + 1);
@@ -83,8 +83,36 @@ export function FeedRow({ entry, onCheer }: FeedRowProps) {
         </div>
         <div style={{ fontSize: "var(--text-xs)", color: "var(--color-text-tertiary)", marginTop: 2 }}>
           {timeAgo(entry.createdAt)}
+          {entry.mine && entry.cheeredBy.length > 0 && (
+            <span style={{ color: "var(--color-accent)", fontWeight: 600 }}>
+              {" · "}Cheered by {entry.cheeredBy.slice(0, 2).join(", ")}
+              {entry.cheeredBy.length > 2 ? ` +${entry.cheeredBy.length - 2}` : ""}
+            </span>
+          )}
         </div>
       </div>
+
+      {entry.mine ? (
+        <div
+          role="img"
+          aria-label={`${entry.cheers} ${entry.cheers === 1 ? "cheer" : "cheers"}`}
+          style={{
+            minWidth: 44,
+            height: 44,
+            padding: "0 var(--space-2)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+            fontSize: 13,
+            fontWeight: 600,
+            color: "var(--color-accent)",
+          }}
+        >
+          <HandsClapping size={22} weight="fill" />
+          {entry.cheers}
+        </div>
+      ) : (
 
       <button
         className="press"
@@ -113,6 +141,7 @@ export function FeedRow({ entry, onCheer }: FeedRowProps) {
         </span>
         {entry.cheers > 0 && <span>{entry.cheers}</span>}
       </button>
+      )}
     </div>
   );
 }

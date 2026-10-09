@@ -63,8 +63,10 @@ export interface FeedEntry {
   createdAt: string;
   userName: string;
   userAvatar: string | null;
+  mine: boolean;
   cheers: number;
   cheeredByMe: boolean;
+  cheeredBy: string[];
 }
 
 export interface SharedPlan {
