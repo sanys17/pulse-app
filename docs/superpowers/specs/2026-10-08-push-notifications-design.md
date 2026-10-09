@@ -4,6 +4,8 @@
 **Status:** Draft for user review
 **Scope:** Reliable Web Push that reaches the user with the app closed and the phone locked: calendar event reminders, habit reminders, a morning summary. Configured from Settings.
 
+> **Revision (2026-10-09, after launch): per-item reminders.** Settings no longer holds default alerts or the habit reminder time; it keeps only on/off switches plus the morning summary time. Alerts and reminder times are chosen when an event, plan or habit is created (forms preselect built-in defaults), plans carry a creator-set alert that members can override, and habits have their own optional reminder time (habits sharing a time arrive as one notification). Implemented in migration `011_per_item_reminders.sql`; the sections below describe the original global-defaults design where they differ.
+
 ## What the user asked for
 
 - Notifications that are **reliable and correct**, arriving when the app is closed.

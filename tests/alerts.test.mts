@@ -6,6 +6,7 @@ import {
   alertSummary,
   applyPrimary,
   applySecondary,
+  builtInAlerts,
   normalizeAlerts,
   primaryChoice,
   secondaryChoice,
@@ -67,4 +68,16 @@ test("normalizeAlerts keeps valid unique offsets, max two", () => {
   assert.deepEqual(normalizeAlerts([7, 15]), [15]); // 7 is not an Apple offset
   assert.deepEqual(normalizeAlerts("nope"), []);
   assert.deepEqual(normalizeAlerts(null), []);
+});
+
+test("built-in alerts preselected in the creation forms", () => {
+  assert.deepEqual(builtInAlerts("event", true), [15]);
+  assert.deepEqual(builtInAlerts("plan", true), [60]);
+  assert.deepEqual(builtInAlerts("event", false), [0]);
+  assert.deepEqual(builtInAlerts("plan", false), [0]);
+});
+
+test("built-in alerts are copies, so callers cannot change the defaults", () => {
+  builtInAlerts("event", true).push(5);
+  assert.deepEqual(builtInAlerts("event", true), [15]);
 });

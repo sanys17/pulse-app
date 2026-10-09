@@ -5,7 +5,7 @@ import { HabitCard } from "../components/HabitCard";
 import { HabitForm } from "../components/HabitForm";
 import { WeeklyHeatmap } from "../components/WeeklyHeatmap";
 import { HABIT_COLORS } from "../types";
-import type { Habit, HabitColor } from "../types";
+import type { Habit, HabitInput } from "../types";
 
 export function Habits() {
   const {
@@ -31,12 +31,7 @@ export function Habits() {
     }
   }, [savedId]);
 
-  const handleSave = (data: {
-    name: string;
-    icon: string;
-    color: HabitColor;
-    frequency: "daily" | "weekly";
-  }) => {
+  const handleSave = (data: HabitInput) => {
     if (editingHabit) {
       updateHabit(editingHabit.id, data);
       setSavedId(editingHabit.id);

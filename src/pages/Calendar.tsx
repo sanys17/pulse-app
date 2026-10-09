@@ -4,7 +4,7 @@ import { useHabitsContext } from "../context/HabitsContext";
 import { useCalendarEventsContext } from "../context/CalendarEventsContext";
 import { useGoogleCalendar, type CalendarEvent } from "../hooks/useGoogleCalendar";
 import { AlertPicker } from "../components/AlertPicker";
-import { useNotificationPreferences } from "../hooks/useNotificationPreferences";
+import { builtInAlerts } from "../lib/alerts.ts";
 import { HABIT_COLORS } from "../types";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -45,12 +45,11 @@ export function Calendar() {
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventTime, setNewEventTime] = useState("");
   const [newEventLocation, setNewEventLocation] = useState("");
-  const { prefs } = useNotificationPreferences();
-  const [newEventAlerts, setNewEventAlerts] = useState<number[] | null>(null);
+  const [newEventAlerts, setNewEventAlerts] = useState<number[]>(builtInAlerts("event", false));
   const eventHasTime = newEventTime !== "";
-  // The choices differ for timed and date-only events, so start over when that changes.
+  // The choices differ for timed and date-only events, so preselect again when that changes.
   useEffect(() => {
-    setNewEventAlerts(null);
+    setNewEventAlerts(builtInAlerts("event", eventHasTime));
   }, [eventHasTime]);
 
   const year = viewDate.getFullYear();
@@ -287,7 +286,7 @@ export function Calendar() {
             {selectedDateLabel}
           </h2>
           <button
-            onPointerUp={() => { setShowAddForm((v) => !v); setNewEventTitle(""); setNewEventTime(""); setNewEventLocation(""); setNewEventAlerts(null); }}
+            onPointerUp={() => { setShowAddForm((v) => !v); setNewEventTitle(""); setNewEventTime(""); setNewEventLocation(""); setNewEventAlerts(builtInAlerts("event", false)); }}
             aria-label="Add event"
             style={{
               position: "relative",
@@ -320,7 +319,7 @@ export function Calendar() {
               e.preventDefault();
               if (!newEventTitle.trim()) return;
               addEvent({ title: newEventTitle.trim(), date: selectedDate, time: newEventTime, location: newEventLocation.trim(), alerts: newEventAlerts });
-              setNewEventTitle(""); setNewEventTime(""); setNewEventLocation(""); setNewEventAlerts(null); setShowAddForm(false);
+              setNewEventTitle(""); setNewEventTime(""); setNewEventLocation(""); setNewEventAlerts(builtInAlerts("event", false)); setShowAddForm(false);
             }}
             style={{
               display: "flex",
@@ -401,17 +400,10 @@ export function Calendar() {
                 fontFamily: "inherit",
               }}
             />
-            {prefs && (
-              <div>
-                <div style={{ fontSize: 13, color: "var(--color-text-tertiary)", marginBottom: "var(--space-1)" }}>Alert</div>
-                <AlertPicker
-                  value={newEventAlerts}
-                  onChange={setNewEventAlerts}
-                  timed={eventHasTime}
-                  defaultAlerts={eventHasTime ? prefs.eventAlerts : prefs.alldayAlerts}
-                />
-              </div>
-            )}
+            <div>
+              <div style={{ fontSize: 13, color: "var(--color-text-tertiary)", marginBottom: "var(--space-1)" }}>Alert</div>
+              <AlertPicker value={newEventAlerts} onChange={(v) => setNewEventAlerts(v ?? [])} timed={eventHasTime} />
+            </div>
             <button
               type="submit"
               style={{

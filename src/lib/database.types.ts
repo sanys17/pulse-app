@@ -33,6 +33,7 @@ export type Database = {
           color: string;
           frequency: string;
           created_at: string;
+          reminder_time: string | null;
         };
         Insert: {
           id?: string;
@@ -41,12 +42,14 @@ export type Database = {
           icon: string;
           color: string;
           frequency: string;
+          reminder_time?: string | null;
         };
         Update: {
           name?: string;
           icon?: string;
           color?: string;
           frequency?: string;
+          reminder_time?: string | null;
         };
         Relationships: [];
       };
@@ -184,6 +187,7 @@ export type Database = {
           status: string;
           created_at: string;
           updated_at: string;
+          alerts: number[] | null;
         };
         Insert: {
           id?: string;
@@ -194,6 +198,7 @@ export type Database = {
           time?: string | null;
           location?: string | null;
           status?: string;
+          alerts?: number[] | null;
         };
         Update: {
           title?: string;
@@ -203,6 +208,7 @@ export type Database = {
           location?: string | null;
           status?: string;
           updated_at?: string;
+          alerts?: number[] | null;
         };
         Relationships: [];
       };
@@ -298,14 +304,10 @@ export type Database = {
         Row: {
           user_id: string;
           calendar_reminders: boolean;
-          event_alerts: number[];
           plan_reminders: boolean;
-          plan_alerts: number[];
           plan_invites: boolean;
           friend_requests: boolean;
-          allday_alerts: number[];
           habit_reminders: boolean;
-          habit_reminder_time: string;
           morning_summary: boolean;
           morning_summary_time: string;
           created_at: string;
@@ -313,27 +315,19 @@ export type Database = {
         Insert: {
           user_id: string;
           calendar_reminders?: boolean;
-          event_alerts?: number[];
           plan_reminders?: boolean;
-          plan_alerts?: number[];
           plan_invites?: boolean;
           friend_requests?: boolean;
-          allday_alerts?: number[];
           habit_reminders?: boolean;
-          habit_reminder_time?: string;
           morning_summary?: boolean;
           morning_summary_time?: string;
         };
         Update: {
           calendar_reminders?: boolean;
-          event_alerts?: number[];
           plan_reminders?: boolean;
-          plan_alerts?: number[];
           plan_invites?: boolean;
           friend_requests?: boolean;
-          allday_alerts?: number[];
           habit_reminders?: boolean;
-          habit_reminder_time?: string;
           morning_summary?: boolean;
           morning_summary_time?: string;
         };

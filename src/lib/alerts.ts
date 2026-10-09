@@ -7,6 +7,13 @@ export const DEFAULT_EVENT_ALERTS: number[] = [15];
 export const DEFAULT_PLAN_ALERTS: number[] = [60];
 export const DEFAULT_DATE_ONLY_ALERTS: number[] = [0];
 
+// What the creation forms preselect, and what the server falls back to for items without a stored alert.
+// Keep in sync with the coalesce(...) defaults in supabase/migrations/011_per_item_reminders.sql.
+export function builtInAlerts(kind: "event" | "plan", timed: boolean): number[] {
+  if (!timed) return [...DEFAULT_DATE_ONLY_ALERTS];
+  return kind === "event" ? [...DEFAULT_EVENT_ALERTS] : [...DEFAULT_PLAN_ALERTS];
+}
+
 const TIMED_LABELS: Record<number, string> = {
   0: "At time of event",
   5: "5 minutes before",

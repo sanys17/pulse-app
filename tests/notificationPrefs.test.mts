@@ -4,45 +4,48 @@ import { DEFAULT_PREFS, formatTime, patchToRow, rowToPrefs, timeOptions } from "
 
 const row = {
   calendar_reminders: true,
-  event_alerts: [15],
   plan_reminders: false,
-  plan_alerts: [60, 5],
   plan_invites: true,
   friend_requests: false,
-  allday_alerts: [0],
   habit_reminders: true,
-  habit_reminder_time: "20:00:00",
   morning_summary: false,
   morning_summary_time: "07:30:00",
 };
 
-test("rowToPrefs maps columns and trims seconds from times", () => {
+test("rowToPrefs maps columns and trims seconds from the morning time", () => {
   const prefs = rowToPrefs(row);
+  assert.equal(prefs.calendarReminders, true);
   assert.equal(prefs.planReminders, false);
-  assert.deepEqual(prefs.planAlerts, [60, 5]);
-  assert.equal(prefs.habitReminderTime, "20:00");
-  assert.equal(prefs.morningSummaryTime, "07:30");
   assert.equal(prefs.friendRequests, false);
+  assert.equal(prefs.habitReminders, true);
+  assert.equal(prefs.morningSummary, false);
+  assert.equal(prefs.morningSummaryTime, "07:30");
 });
 
-test("rowToPrefs drops invalid alert values from the database", () => {
-  assert.deepEqual(rowToPrefs({ ...row, event_alerts: [15, 7, 15, 60, 120] }).eventAlerts, [15, 60]);
+test("rowToPrefs ignores columns the database no longer has", () => {
+  const prefs = rowToPrefs({ ...row, event_alerts: [15], habit_reminder_time: "20:00:00" } as typeof row);
+  assert.deepEqual(Object.keys(prefs).sort(), [
+    "calendarReminders",
+    "friendRequests",
+    "habitReminders",
+    "morningSummary",
+    "morningSummaryTime",
+    "planInvites",
+    "planReminders",
+  ]);
 });
 
 test("patchToRow only emits the provided keys, in column names", () => {
-  assert.deepEqual(patchToRow({ eventAlerts: [30], habitReminderTime: "21:15" }), {
-    event_alerts: [30],
-    habit_reminder_time: "21:15",
+  assert.deepEqual(patchToRow({ morningSummaryTime: "08:15", planInvites: false }), {
+    morning_summary_time: "08:15",
+    plan_invites: false,
   });
   assert.deepEqual(patchToRow({}), {});
-  assert.deepEqual(patchToRow({ planInvites: false }), { plan_invites: false });
 });
 
-test("defaults match the spec", () => {
-  assert.deepEqual(DEFAULT_PREFS.eventAlerts, [15]);
-  assert.deepEqual(DEFAULT_PREFS.planAlerts, [60]);
-  assert.deepEqual(DEFAULT_PREFS.alldayAlerts, [0]);
-  assert.equal(DEFAULT_PREFS.habitReminderTime, "20:00");
+test("defaults: everything on, morning summary at 07:00", () => {
+  assert.equal(DEFAULT_PREFS.calendarReminders, true);
+  assert.equal(DEFAULT_PREFS.habitReminders, true);
   assert.equal(DEFAULT_PREFS.morningSummaryTime, "07:00");
 });
 
