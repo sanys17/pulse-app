@@ -7,15 +7,16 @@
 ## What the user asked for
 
 - Notifications that are **reliable and correct**, arriving when the app is closed.
-- Three kinds: calendar events, habit reminders, morning summary.
+- Kinds: calendar event reminders, **plan reminders and plan invitations**, habit reminders, morning summary.
+- **Alert timing follows Apple Calendar**: at time of event, 5, 10, 15, 30 minutes, 1 hour, 2 hours, 1 day, 2 days, 1 week before; up to two alerts per item; settable as a default in Settings and per item.
 - **Notification settings inside the app's Settings.**
 - Scheduler decision (made): **Supabase pg_cron calls a Vercel API route every minute.** Free, works on Vercel Hobby, lives in the existing repo/deploy.
 
 ## Success criteria
 
 1. A user can turn notifications on from Settings with one permission prompt, and turn them off again.
-2. Each kind has its own switch; reminder times and the calendar lead time are configurable.
-3. A calendar reminder arrives `lead` minutes before an event that has a time (default 15).
+2. Each kind has its own switch; habit and morning times are configurable.
+3. Calendar events and plans alert at the user's chosen Apple-style offsets (see Alerts below), from a default in Settings that can be overridden per event (when creating it) and per plan (by each member).
 4. A habit reminder arrives at the chosen local time (default 20:00) listing today's unfinished habits, and is skipped when none are left.
 5. A morning summary arrives at the chosen local time (default 07:00) with today's event and habit counts, and is skipped when both are zero.
 6. Tapping a notification opens the relevant screen (`/calendar`, `/habits`, `/`).
@@ -24,6 +25,20 @@
 9. Works on iPhone (installed PWA), Android Chrome, desktop Chrome/Edge/Firefox.
 
 **Honest limits:** delivery goes through Apple/Google push services and the phone's OS (Focus modes, Low Power Mode, a force-quit app). "Reliable" here means the server side never loses or duplicates a reminder; the OS can still delay one. iPhone only supports web push for the app **added to the Home Screen** (iOS 16.4+), and the permission prompt must follow a tap.
+
+## Alerts (Apple Calendar logic)
+
+An alert is "N minutes before the start". Stored as an integer array of minutes, at most two values; empty array = none.
+
+| Item has a time | Choices (stored minutes) |
+|---|---|
+| Timed event / plan | At time of event (0), 5, 10, 15, 30 minutes before, 1 hour (60), 2 hours (120), 1 day (1440), 2 days (2880), 1 week (10080) before, None |
+| Date only (no time) | On the day at 9:00 AM (0), 1 day before at 9:00 AM (1440), 2 days (2880), 1 week (10080) before, None. The anchor is 09:00 local time of the event day. |
+
+- **Where it is set:** (1) defaults in Settings, one pair per kind (events, plans) plus one shared default for date-only items; (2) per event in the Add Event form ("Alert" and "Second alert", default "Default"); (3) per plan, by each member, in Plan Detail ("Remind me"), because each person wants their own alert, as with shared events in Apple Calendar. `null` on the item = use the user's default.
+- **Defaults:** events 15 minutes before, plans 1 hour before, date-only 'on the day at 9:00 AM'.
+- **When an alert is due:** from its alert time until 15 minutes later, but never after the item has started (for "at time of event", until 15 minutes after the start). A missed run inside that window still delivers; later does not (a stale reminder is worse than none).
+- **Not in v1:** "Custom" times, editing an event's alert after creation (events cannot be edited today).
 
 ## Architecture
 
@@ -53,14 +68,16 @@ Decisions:
 (002 was reserved for this; 009 is the next free number.)
 
 - `profiles.timezone text not null default 'UTC'`.
+- `calendar_events.alerts int[]` and `plan_members.alerts int[]`, both nullable (null = use the user's default; `'{}'` = none).
 - `push_subscriptions(id, user_id, endpoint unique, p256dh, auth, user_agent, created_at)`. RLS: select/insert/delete own rows; no update (delete + insert).
-- `notification_preferences(user_id unique, calendar_reminders default true, calendar_lead_minutes default 15, habit_reminders default true, habit_reminder_time default '20:00', morning_summary default true, morning_summary_time default '07:00', created_at)`. RLS: select/insert/update own row. **Backfill** a row for every existing profile and add a trigger so new profiles get one. The client also upserts its row, so a missing row can never block Settings.
+- `notification_preferences(user_id unique, calendar_reminders default true, event_alerts int[] default '{15}', plan_reminders default true, plan_alerts int[] default '{60}', plan_invites default true, allday_alerts int[] default '{0}', habit_reminders default true, habit_reminder_time default '20:00', morning_summary default true, morning_summary_time default '07:00', created_at)`. RLS: select/insert/update own row. **Backfill** a row for every existing profile and add a trigger so new profiles get one. The client also upserts its row, so a missing row can never block Settings.
 - `notification_log(user_id, kind, reference_id, sent_at, primary key (user_id, kind, reference_id))`. RLS on, no policies (server only). A daily pg_cron job deletes rows older than 3 days.
 - `pending_notifications(p_now timestamptz default now())` returns `(user_id, kind, reference_id, title, body, url, tag)`, `security definer`, with `revoke execute ... from public, anon, authenticated` so only the service role can call it (otherwise any signed-in user could read other users' reminders). `p_now` lets us test with a fake clock.
 
 Rules inside `pending_notifications`, per user with at least one subscription and the kind enabled (local = `p_now at time zone profiles.timezone`):
 
-- **calendar**: event has a `time`; `event_start - lead <= p_now < event_start`, where `event_start = (date + time) at time zone timezone`. `reference_id = event id || ':' || date || ' ' || time`, so a rescheduled event reminds again. Body: `"<title> at HH24:MI"`, url `/calendar`.
+- **calendar** and **plan** reminders share one rule. Items: the user's `calendar_events`, and `shared_plans` where the user is a member whose `rsvp` is not `declined` and the plan status is not `cancelled` or `completed` and has a `date`. For each item take `coalesce(item.alerts, default)`, where the default is `event_alerts` / `plan_alerts` for timed items and `allday_alerts` for date-only items. For each offset: `start = (date + time) at time zone timezone` (date-only: `date + 09:00`), `alert_time = start - offset`; due when `alert_time <= p_now < least(alert_time + 15 min, start)` (offset 0: `< start + 15 min`). `reference_id = kind || ':' || item id || ':' || start || ':' || offset`, so a different offset or a rescheduled item alerts again but the same alert never repeats. Body: `"<title> at HH24:MI"` (plans: `"<title> with Anna, Tom"` up to 2 names); title carries the lead (`In 15 min`, `Now`, `Tomorrow`). Urls `/calendar` and `/social/plan/<id>`.
+- **plan invitation**: a `plan_members` row for the user, `rsvp = 'pending'`, created in the last 15 minutes, where the user is not the creator, `plan_invites` on. Body `"Anna invited you to <title>"`, url `/social/plan/<id>`. `reference_id = plan id`.
 - **habit**: `local_date + habit_reminder_time <= local_now < that + 30 minutes` (catch-up window, no midnight wrap bug). Incomplete habits = daily habits, plus weekly habits **on Monday** (mirrors `todaysHabits` in the app), with no completion for `local_date`. Skip if none. Body lists up to 3 names then `+N more`. `reference_id = local_date`, url `/habits`.
 - **morning**: same window using `morning_summary_time`. Counts today's `calendar_events` and the incomplete habits above. Skip if both are 0. Body `"2 events today · 5 habits to go"`, url `/`.
 
@@ -103,11 +120,19 @@ States of the top card:
 
 When `on`, three rows, each with a switch and its own control:
 
-- **Calendar reminders**: lead time select (5, 10, 15, 30, 60 min).
-- **Habit reminders**: time select (15-minute steps).
-- **Morning summary**: time select (15-minute steps).
+- **Calendar events**: switch, then **Alert** and **Second alert** selects with the Apple options above.
+- **Plans**: switch for reminders (**Alert**, **Second alert**) and a separate switch for **invitations**.
+- **Items without a time**: one select (On the day at 9:00 AM, 1 day before, 2 days before, 1 week before).
+- **Habit reminders**: switch and time select (15-minute steps).
+- **Morning summary**: switch and time select (15-minute steps).
 
 Plus **Send a test notification** (calls `api/send-test-notification`, shows a toast with the result) and a muted line `Times use your timezone: Europe/Prague`. Preferences are per account; subscriptions are per device.
+
+## Where else alerts are set
+
+- **Add Event form (`Calendar.tsx`)**: an "Alert" row (and "Second alert" once the first is set) below the time field, default "Default (15 minutes before)"; options switch to the date-only list when no time is entered. Saved to `calendar_events.alerts`.
+- **Plan Detail**: a "Remind me" row with the same two selects, saved to the member's `plan_members.alerts`. The Create Plan sheet gets no alert field because the alert is personal to each member.
+- A shared `AlertPicker` component renders the two selects and the options, so the three places stay identical.
 
 ## Reliability and monitoring
 
@@ -117,16 +142,16 @@ Plus **Send a test notification** (calls `api/send-test-notification`, shows a t
 
 ## Testing (no test runner exists)
 
-- **SQL:** run `select * from pending_notifications('<fake time>')` against fixtures (an event, a habit, a user in `Europe/Prague`) around the boundaries: just before/after lead time, window edges, midnight, Monday weekly habit, all habits done, rescheduled event.
+- **SQL:** run `select * from pending_notifications('<fake time>')` against fixtures (events and plans, a habit, a user in `Europe/Prague`) around the boundaries: each Apple offset, two alerts on one item, date-only item at 09:00 and the day before, offset 0 window, an alert after the item started (must not fire), declined/cancelled plan, per-item override vs default, a plan invitation, midnight, Monday weekly habit, all habits done, rescheduled event.
 - **Route:** call with and without the secret; with a bad token; with a dead subscription (expect it deleted).
 - **End to end:** enable on a real iPhone Home Screen app, send a test, then set the habit time one minute ahead and lock the phone; tap each notification type and check the destination; disable and confirm no more arrive.
 - Verification by build (`npx tsc -b`) for the TypeScript parts. I cannot run SQL against Supabase myself, so SQL checks are done by the user in the SQL editor.
 
 ## Files
 
-New: `src/sw.ts`, `src/lib/push.ts`, `src/hooks/useNotificationPreferences.ts`, `src/components/Toggle.tsx`, `api/send-notifications.ts`, `api/send-test-notification.ts`, `supabase/migrations/009_push_notifications.sql`, `supabase/scheduler/send-notifications.sql`.
-Changed: `vite.config.ts`, `src/pages/Settings.tsx`, `package.json` (`web-push`, `workbox-*`), `.env.example`, docs (`CLAUDE.md`, `handoff.md`).
+New: `src/components/AlertPicker.tsx`, `src/lib/alerts.ts` (option lists and labels), `src/sw.ts`, `src/lib/push.ts`, `src/hooks/useNotificationPreferences.ts`, `src/components/Toggle.tsx`, `api/send-notifications.ts`, `api/send-test-notification.ts`, `supabase/migrations/009_push_notifications.sql`, `supabase/scheduler/send-notifications.sql`.
+Changed: `vite.config.ts`, `src/pages/Settings.tsx`, `src/pages/Calendar.tsx`, `src/pages/PlanDetail.tsx`, `src/hooks/useCalendarEvents.ts`, `src/hooks/useSharedPlans.ts`, `src/lib/database.types.ts`, `package.json` (`web-push`, `workbox-*`), `.env.example`, docs (`CLAUDE.md`, `handoff.md`).
 
 ## Out of scope
 
-Google Calendar events (integration not connected), quiet hours (use OS Focus), snooze, per-device preferences, rich actions/images, email, delivery analytics.
+Friend-request notifications (cheap to add later with the same engine), cheer notifications, plan change/cancel notifications, Google Calendar events (integration not connected), quiet hours (use OS Focus), snooze, per-device preferences, rich actions/images, email, delivery analytics.
