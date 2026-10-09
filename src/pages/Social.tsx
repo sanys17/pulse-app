@@ -466,7 +466,7 @@ export function Social() {
             position: "fixed",
             left: 0,
             right: 0,
-            bottom: "calc(96px + env(safe-area-inset-bottom, 0px))",
+            bottom: "calc(var(--nav-offset) + 76px + env(safe-area-inset-bottom, 0px))",
             display: "flex",
             justifyContent: "center",
             padding: "0 var(--space-4)",

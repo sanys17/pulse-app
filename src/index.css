@@ -248,6 +248,8 @@ button {
 
 /* ─── Status tokens ─── */
 :root {
+  /* Distance of the floating nav and plus button from the bottom edge; page padding and toasts derive from it. */
+  --nav-offset: 34px;
   --color-success: #66BB6A;
   --color-info: #64B5F6;
   --color-danger: #E5484D;

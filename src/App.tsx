@@ -82,7 +82,7 @@ function AppContent() {
           margin: "0 auto",
           minHeight: "100dvh",
           padding: "calc(env(safe-area-inset-top, 0px) + var(--space-6)) var(--space-4)",
-          paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))",
+          paddingBottom: "calc(var(--nav-offset) + 60px + env(safe-area-inset-bottom, 0px))",
         }}
       >
         <Routes>

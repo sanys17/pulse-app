@@ -82,7 +82,7 @@ export function BottomNav({ onAddHabit, onQuickLog, pendingRequests = 0 }: Botto
           onPointerDown={(e) => e.stopPropagation()}
           style={{
             position: "fixed",
-            bottom: 80,
+            bottom: "calc(var(--nav-offset) + 60px)",
             right: 16,
             display: "flex",
             flexDirection: "column",
@@ -137,7 +137,7 @@ export function BottomNav({ onAddHabit, onQuickLog, pendingRequests = 0 }: Botto
         aria-label="Main navigation"
         style={{
           position: "fixed",
-          bottom: 20,
+          bottom: "var(--nav-offset)",
           left: "50%",
           transform: "translateX(-50%)",
           width: 196,
@@ -215,7 +215,7 @@ export function BottomNav({ onAddHabit, onQuickLog, pendingRequests = 0 }: Botto
         aria-label={open ? "Close menu" : "Quick actions"}
         style={{
           position: "fixed",
-          bottom: 21,
+          bottom: "calc(var(--nav-offset) + 1px)",
           right: 16,
           width: 44,
           height: 44,
