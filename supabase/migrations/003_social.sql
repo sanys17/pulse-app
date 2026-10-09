@@ -59,9 +59,6 @@ create table public.shared_plans (
 );
 
 alter table public.shared_plans enable row level security;
-create policy "Members see plans" on public.shared_plans for select using (
-  exists (select 1 from public.plan_members pm where pm.plan_id = id and pm.user_id = auth.uid())
-);
 create policy "Creator manages plan" on public.shared_plans for update using (auth.uid() = creator_id);
 create policy "Users create plans" on public.shared_plans for insert with check (auth.uid() = creator_id);
 create policy "Creator deletes plan" on public.shared_plans for delete using (auth.uid() = creator_id);
@@ -89,6 +86,11 @@ create policy "Users update own rsvp" on public.plan_members for update using (a
 create policy "Creator or self removes" on public.plan_members for delete using (
   auth.uid() = user_id
   or exists (select 1 from public.shared_plans sp where sp.id = plan_id and sp.creator_id = auth.uid())
+);
+
+-- (created here, after plan_members exists; 004 replaces it)
+create policy "Members see plans" on public.shared_plans for select using (
+  exists (select 1 from public.plan_members pm where pm.plan_id = id and pm.user_id = auth.uid())
 );
 
 -- Plan checklist
