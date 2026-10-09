@@ -4,7 +4,7 @@ import { Avatar } from "./Avatar";
 
 interface SentRequestRowProps {
   request: FriendRequest;
-  onCancel: (friendshipId: string) => Promise<void>;
+  onCancel: (friendshipId: string) => Promise<unknown>;
 }
 
 export function SentRequestRow({ request, onCancel }: SentRequestRowProps) {

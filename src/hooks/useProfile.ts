@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { expectRows } from "../lib/monitoring";
 import { useAuth } from "../context/AuthContext";
 
 export function useProfile() {
@@ -34,10 +35,12 @@ export function useProfile() {
   const updateName = useCallback(async (newName: string) => {
     if (!user) return;
     setName(newName);
-    await supabase
+    const { data, error } = await supabase
       .from("profiles")
       .update({ name: newName })
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .select("user_id");
+    if (!error) expectRows("profiles.update", data);
   }, [user]);
 
   return { name, avatarUrl, loading, updateName };

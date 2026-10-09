@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { subscribeToTables } from "../lib/realtime";
+import { expectRows } from "../lib/monitoring";
 import type { Friend, FriendRequest } from "../types";
 
 interface UserSearchResult {
@@ -150,38 +151,54 @@ export function useFriendships() {
   );
 
   const acceptRequest = useCallback(
-    async (friendshipId: string) => {
-      await supabase
+    async (friendshipId: string): Promise<boolean> => {
+      const { data, error } = await supabase
         .from("friendships")
         .update({ status: "accepted", updated_at: new Date().toISOString() })
-        .eq("id", friendshipId);
+        .eq("id", friendshipId)
+        .select("id");
+      const ok = !error && expectRows("friendships.accept", data);
       await fetchAll();
+      return ok;
     },
     [fetchAll],
   );
 
   const declineRequest = useCallback(
-    async (friendshipId: string) => {
-      await supabase
+    async (friendshipId: string): Promise<boolean> => {
+      const { data, error } = await supabase
         .from("friendships")
         .update({ status: "declined", updated_at: new Date().toISOString() })
-        .eq("id", friendshipId);
-      setPendingIncoming((prev) => prev.filter((r) => r.friendshipId !== friendshipId));
+        .eq("id", friendshipId)
+        .select("id");
+      const ok = !error && expectRows("friendships.decline", data);
+      if (ok) setPendingIncoming((prev) => prev.filter((r) => r.friendshipId !== friendshipId));
+      else await fetchAll();
+      return ok;
     },
-    [],
+    [fetchAll],
   );
 
-  const cancelRequest = useCallback(async (friendshipId: string) => {
-    setPendingOutgoing((prev) => prev.filter((r) => r.friendshipId !== friendshipId));
-    await supabase.from("friendships").delete().eq("id", friendshipId);
-  }, []);
+  const cancelRequest = useCallback(
+    async (friendshipId: string): Promise<boolean> => {
+      setPendingOutgoing((prev) => prev.filter((r) => r.friendshipId !== friendshipId));
+      const { data, error } = await supabase.from("friendships").delete().eq("id", friendshipId).select("id");
+      const ok = !error && expectRows("friendships.cancel", data);
+      if (!ok) await fetchAll();
+      return ok;
+    },
+    [fetchAll],
+  );
 
   const removeFriend = useCallback(
-    async (friendshipId: string) => {
+    async (friendshipId: string): Promise<boolean> => {
       setFriends((prev) => prev.filter((f) => f.friendshipId !== friendshipId));
-      await supabase.from("friendships").delete().eq("id", friendshipId);
+      const { data, error } = await supabase.from("friendships").delete().eq("id", friendshipId).select("id");
+      const ok = !error && expectRows("friendships.remove", data);
+      if (!ok) await fetchAll();
+      return ok;
     },
-    [],
+    [fetchAll],
   );
 
   const searchUsers = useCallback(

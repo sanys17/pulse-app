@@ -14,21 +14,29 @@ All on `master`, deployed on Vercel, `npm run build` passes. No test runner exis
 | Design system + CLAUDE.md | Done, merged (PR #5) |
 | Friends' profile visibility (migration 005) | Merged (PR #6). `005` run in Supabase by the user; names/avatars not separately confirmed |
 | Friend requests: toast, Sent Requests section, live updates (migration 006), pinned dev port, `.local` host | In PR #8 (open). `006` and `007` are applied, so live updates are on for friendships, plans, members, checklist and feed (shared helper `src/lib/realtime.ts`); friendships also polls every 20s as a fallback. Own-data tables (habits, tasks, events) are not live yet: a refetch triggered by the user's own tap can revert a fast second tap, so it needs an echo guard first |
-| Social tab redesign: needs-you requests, upcoming plans with day/time, friends' activity grouped by day with one-tap cheer, drag-to-dismiss sheets, 44px targets, tokens | Built on branch `feat/social-redesign` (local, not pushed). Not tested on a device. Needs `008_feed_reactions.sql` run in Supabase for cheers |
+| Social tab redesign: needs-you requests, upcoming plans, friends' activity with one-tap cheers, owner deletes (feed entries with Undo; a plan's activity entry deletes the plan after a confirm), drag-to-dismiss sheets, 44px targets, tokens | Done, merged (PR #10). `008_feed_reactions.sql` run by the user. Not yet confirmed end to end on a device |
 | **Push notifications** | **Spec only** (`docs/superpowers/specs/2026-10-08-push-notifications-design.md`, Draft). No implementation: no service-worker push handler, no `push_subscriptions` migration (002 reserved), no sender |
 
 ## Supabase (user runs SQL manually in the SQL Editor)
-Applied (evidenced by plans working in the app): `001_initial_schema.sql`, `003_social.sql`, `004_fix_plan_policies.sql`., `005_friend_profile_visibility.sql` (run by the user, 2026-10-09). `006_friendships_realtime.sql` and `007_social_realtime.sql` (run by the user, 2026-10-09; verified working with two accounts). Not confirmed from the repo: whether Google OAuth is configured in Supabase and whether `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set in Vercel (the app throws on startup without them). Ask the user if sign-in or a deploy misbehaves.
+Applied (evidenced by plans working in the app): `001_initial_schema.sql`, `003_social.sql`, `004_fix_plan_policies.sql`., `005_friend_profile_visibility.sql` (run by the user, 2026-10-09). `006_friendships_realtime.sql` and `007_social_realtime.sql` (run by the user, 2026-10-09; verified working with two accounts), `008_feed_reactions.sql` (run by the user). Not confirmed from the repo: whether Google OAuth is configured in Supabase and whether `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set in Vercel (the app throws on startup without them). Ask the user if sign-in or a deploy misbehaves.
 
 ## Local dev setup (hard-won)
 - Run `npm run dev -- --host`; port is pinned to 5173 with `strictPort`. Phone URL: `http://charlie.local:5173` (`allowedHosts: ['.local']` in `vite.config.ts`).
 - Supabase Auth, Redirect URLs must contain `http://localhost:5173/**` and `http://charlie.local:5173/**` (plus the Vercel URL). The `http://192.168.0.65:5173/**` entry was rejected by Supabase even when correctly saved, so the app redirected sign-in to the live Site URL. Diagnose with the error-callback probe: `GET /auth/v1/authorize?provider=google&redirect_to=X`, then `GET /auth/v1/callback?error=access_denied&state=<state from the Location header>`; its `Location` shows the validated redirect (X if accepted, the Site URL if not).
 - The app sends `redirectTo: ${window.location.origin}/` (trailing slash).
 
+## Monitoring (code done, needs your setup)
+Code is merged-ready on the branch: `monitoredFetch`, `expectRows` write checks, error boundary, anonymous user id. To switch it on:
+1. Better Stack: create an error-tracking application (platform: React / Sentry SDK) and copy the DSN. Pick the EU data location if offered.
+2. Vercel project, Environment Variables: add `VITE_SENTRY_DSN` (Production) and redeploy. Optionally enable "Automatically expose System Environment Variables" so releases are tagged with the commit.
+3. Add alert rules (start with email on new errors only) and an uptime monitor for the live URL.
+4. Verify after deploy: in the live site's browser console run `setTimeout(() => { throw new Error("test alert") })` and check it arrives.
+Not verified: whether Better Stack readable stack traces need source map upload (production code is minified); check the first real error.
+
 ## Known issues (not fixed)
 1. **Friends' names/avatars (fix merged and applied; the two-account live-update test passed, but names/avatars were not separately confirmed).** `profiles` RLS was own-row-only; migration 005 adds `can_view_profile()` and a SELECT policy for pending/accepted friends and plan co-members. Verify with two accounts (friends list, requests, feed, shared plan). Username search still shows blank names for unconnected users by design.
 2. **Design drift** (see `docs/design-system.md` section 9): two glass recipes, two accents (Moonstone `#8E9BC4` is canonical per the user's palette; violet `#A78BFA` hard-coded in calendar, sign-in, buttons), raw hex status colors, `transition: all`, low-contrast secondary text (`#626880` is 3.4:1 on cards).
-3. **Data hooks swallow errors** (`useHabits`, `useTasks`, `useCalendarEvents`, `useProfile`, `useSharedPlans`): an expired token or RLS failure looks like an empty list. `useSharedPlans.createPlan` returns silently on failure, which hid the RLS bug. Surface errors.
+3. **Data hooks swallow errors** (failures are now reported centrally by `monitoredFetch`, but screens still show nothing; add user-facing toasts and rollback) (`useHabits`, `useTasks`, `useCalendarEvents`, `useProfile`, `useSharedPlans`): an expired token or RLS failure looks like an empty list. `useSharedPlans.createPlan` returns silently on failure, which hid the RLS bug. Surface errors.
 4. Mutations filter by `id` only, not also `user_id` (RLS covers it; defense in depth).
 5. Profile name writes to Supabase on every keystroke (Settings); debounce or save on blur.
 6. Migration (`src/lib/migrate.ts`): completions insert is not deduplicated (a duplicate fails the whole batch); habit ID mapping relies on insert-return order.

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { expectRows } from "../lib/monitoring";
 import { useAuth } from "../context/AuthContext";
 
 export interface CalendarEvent {
@@ -80,7 +81,8 @@ export function useCalendarEvents() {
 
   const removeEvent = useCallback(async (id: string) => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
-    await supabase.from("calendar_events").delete().eq("id", id);
+    const { data, error } = await supabase.from("calendar_events").delete().eq("id", id).select("id");
+    if (!error) expectRows("calendar_events.delete", data);
   }, []);
 
   return { events, loading, addEvent, removeEvent };

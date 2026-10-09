@@ -28,6 +28,12 @@ Short version: tokens from `src/index.css` (`--color-*`, `--space-*`, `--radius-
 - `src/lib/database.types.ts` must stay a `type Database = {...}` (not `interface`) and every table needs `Relationships`, plus schema-level `Views`, `Functions`, `Enums`, `CompositeTypes`. Otherwise every query resolves to `never`. Update it whenever a migration changes the schema.
 - localStorage is only used for the Google Calendar token and the one-time migration flag (`src/lib/migrate.ts`). Do not add new app data to localStorage.
 
+## Monitoring
+- `src/lib/monitoring.ts` reports to Better Stack (or Sentry) via the Sentry SDK; it is a no-op without `VITE_SENTRY_DSN` and only active in production builds. Privacy: `dataCollection` is locked down (no cookies, headers, bodies, query strings) and only the anonymous user id is attached. Keep it that way.
+- Every Supabase request goes through `monitoredFetch` (set in `src/lib/supabase.ts`), so failed requests are reported centrally. Expected failures are listed in `src/lib/monitoringRules.ts` (duplicate `23505`, `.single()` with no row `PGRST116`, auth 4xx); add to it rather than sprinkling try/catch.
+- A write that "succeeds" with 0 rows is how RLS bugs hide. For important updates/deletes use `.select("id")` and `expectRows("table.operation", data)`.
+- New code: surface errors to the user (toast) and report unexpected ones with `reportError(err, { area, target })`; never swallow them silently.
+
 ## Supabase migrations
 - Live updates: use `subscribeToTables([...], refetch)` from `src/lib/realtime.ts` in a hook's effect (debounced, refetches after a reconnect). The table must be in the `supabase_realtime` publication via a migration. Social tables are live; own-data tables (habits, completions, tasks, calendar_events) are not yet.
 - Files in `supabase/migrations`, run **manually** by the user in the Supabase SQL Editor, in order (001, 003, 004, 005, 006, 007, 008; 002 is reserved for push notifications). Tell the user which file to run; you cannot run it.

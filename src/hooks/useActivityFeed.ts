@@ -92,10 +92,7 @@ export function useActivityFeed() {
       }
       if (!append) ownCheerCounts.current = new Map([...ownNow].map(([id, e]) => [id, e.cheers]));
 
-      // Your own entries only appear once someone has cheered them.
-      const visible = all.filter(
-        (e) => (!e.mine || e.cheers > 0) && !pendingDeletes.current.has(e.id),
-      );
+      const visible = all.filter((e) => !pendingDeletes.current.has(e.id));
 
       rawLoaded.current = append ? rawLoaded.current + rows.length : rows.length;
       setEntries((prev) => (append ? [...prev, ...visible] : visible));
