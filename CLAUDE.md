@@ -1,0 +1,43 @@
+# Pulse
+
+Mobile-first habit/health tracker PWA. React 19, TypeScript, Vite, React Router, Supabase (Postgres + Auth + RLS), deployed on Vercel. Dark glass UI, tested primarily as an installed iPhone PWA.
+
+## Current status
+@handoff.md
+
+## Commands
+- `npm run dev` start dev server (the user tests on a phone over LAN HTTP)
+- `npm run build` runs `tsc -b && vite build`. This is the real check.
+- **Never use `npx tsc --noEmit` to verify.** The root tsconfig has `"files": []` with project references, so it checks nothing and always passes. Use `npx tsc -b`.
+- There is no test runner. Verify with the build, and for UI changes say plainly when you could not test on a device.
+
+## Design
+@docs/design-system.md
+
+Short version: tokens from `src/index.css` (`--color-*`, `--space-*`, `--radius-*`), 44px tap targets, glass only for floating chrome, springs for motion, Geist font, always dark. Check "Known drift" there before copying an existing pattern; some existing styles are not canonical.
+
+## iOS / PWA rules (each one cost real debugging time)
+- Inputs render at 16px on touch devices (global rule in `src/index.css`), otherwise iOS zooms the page and stays zoomed.
+- Empty `type="date"` / `type="time"` inputs render blank on iOS. Overlay a placeholder label while empty (see `src/pages/Calendar.tsx`, `src/components/CreatePlanSheet.tsx`).
+- Do not use `crypto.randomUUID()` (unavailable over plain HTTP on LAN). Temp IDs: `Date.now().toString(36) + Math.random().toString(36).slice(2, 7)`.
+- Keep `-webkit-backdrop-filter` alongside `backdrop-filter`.
+
+## Data layer
+- Provider order in `src/App.tsx`: Auth, Habits, Tasks, CalendarEvents (and Social), inside an auth gate. Hooks live in `src/hooks`, contexts in `src/context`.
+- Mutations are optimistic: update state, write to Supabase, **roll back on error**. Hooks also refetch on `visibilitychange`. Don't swallow errors silently in new code.
+- `src/lib/database.types.ts` must stay a `type Database = {...}` (not `interface`) and every table needs `Relationships`, plus schema-level `Views`, `Functions`, `Enums`, `CompositeTypes`. Otherwise every query resolves to `never`. Update it whenever a migration changes the schema.
+- localStorage is only used for the Google Calendar token and the one-time migration flag (`src/lib/migrate.ts`). Do not add new app data to localStorage.
+
+## Supabase migrations
+- Files in `supabase/migrations`, run **manually** by the user in the Supabase SQL Editor, in order (001, 003, 004; 002 is reserved for push notifications). Tell the user which file to run; you cannot run it.
+- RLS pitfalls: an unqualified column inside a policy subquery resolves to the inner table (`pm.plan_id = id` compares to `pm.id`); a policy that queries its own table recurses; an insert with `.select()` needs a SELECT policy the new row already satisfies. For membership checks use a `security definer` helper like `is_plan_member()`.
+- Always filter mutations by `user_id` as well as `id` (defense in depth beyond RLS).
+
+## Git
+- Work on a branch and open a PR into `master`. Do not push or merge without being asked.
+- Commit style: `feat:`, `fix:`, `docs:`, `style:`.
+- `*.local` is gitignored (`.env.local` holds `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`). Never commit secrets. The same variables must be set in Vercel or the app throws on startup.
+- A cloud Claude session also works on this repo. Run `git fetch` and read `handoff.md` before assuming local state is current.
+
+## Tools
+- Use the LSP tool for type and symbol questions (works well for types and imports). It cannot resolve values reached through React context destructuring; use grep for those.
