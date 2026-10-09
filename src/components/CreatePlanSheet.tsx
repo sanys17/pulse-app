@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { Check } from "@phosphor-icons/react";
+import { Check, CalendarBlank, Clock } from "@phosphor-icons/react";
 import { builtInAlerts } from "../lib/alerts.ts";
 import type { Friend } from "../types";
 import { Sheet } from "./Sheet";
@@ -112,11 +112,17 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
           {(
             [
-              { type: "date", label: "Date", value: date, set: setDate },
-              { type: "time", label: "Time", value: time, set: setTime },
+              { type: "date", label: "Date", Icon: CalendarBlank, value: date, set: setDate },
+              { type: "time", label: "Time", Icon: Clock, value: time, set: setTime },
             ] as const
           ).map((f) => (
             <div key={f.type} style={{ position: "relative", width: "100%", overflow: "hidden", borderRadius: "var(--radius-sm)" }}>
+              <f.Icon
+                size={18}
+                aria-hidden="true"
+                color="var(--color-text-tertiary)"
+                style={{ position: "absolute", left: "var(--space-3)", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+              />
               <input
                 type={f.type}
                 value={f.value}
@@ -124,6 +130,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
                 aria-label={f.label}
                 style={{
                   ...inputStyle,
+                  paddingLeft: 40,
                   colorScheme: "dark",
                   display: "block",
                   minWidth: 0,
@@ -137,7 +144,7 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
                 <span
                   style={{
                     position: "absolute",
-                    left: "var(--space-3)",
+                    left: 40,
                     top: "50%",
                     transform: "translateY(-50%)",
                     fontSize: 15,
