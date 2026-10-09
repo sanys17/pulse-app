@@ -18,6 +18,8 @@ as $$
     from public.profiles p
     join public.notification_preferences np on np.user_id = p.user_id
     where exists (select 1 from public.push_subscriptions ps where ps.user_id = p.user_id)
+      -- defence in depth: one unrecognised time zone must never fail the whole run
+      and p.timezone in (select tz.name from pg_catalog.pg_timezone_names tz)
   ),
 
   -- [A] reminders for calendar events and plans

@@ -36,6 +36,24 @@ export interface RunSummary {
   released: number;
 }
 
+// Push endpoints must be a real push service. Without this a signed-in user could register an
+// internal or attacker-controlled URL and make the server send requests to it (SSRF).
+const EXACT_PUSH_HOSTS = ["fcm.googleapis.com", "updates.push.services.mozilla.com"];
+const PUSH_HOST_SUFFIXES = [".push.apple.com", ".notify.windows.com"];
+
+export function isAllowedPushEndpoint(endpoint: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.username !== "" || url.password !== "") return false;
+  if (url.port !== "" && url.port !== "443") return false;
+  const host = url.hostname.toLowerCase();
+  return EXACT_PUSH_HOSTS.includes(host) || PUSH_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+}
+
 export function isAuthorized(header: string | undefined, secret: string | undefined): boolean {
   if (!secret || !header) return false;
   // Hash both sides so lengths always match and comparison time does not leak the secret.
@@ -73,6 +91,11 @@ export async function processNotifications(due: DueNotification[], deps: Deps): 
       let delivered = 0;
       let transient = 0;
       for (const sub of subs) {
+        if (!isAllowedPushEndpoint(sub.endpoint)) {
+          await deps.removeSubscription(sub.endpoint);
+          summary.removed++;
+          continue;
+        }
         try {
           await deps.send(sub, payload);
           delivered++;

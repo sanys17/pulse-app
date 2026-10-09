@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildPayload,
   isAuthorized,
+  isAllowedPushEndpoint,
   isGone,
   processNotifications,
   type Deps,
@@ -19,8 +20,8 @@ const note = (id: string): DueNotification => ({
   url: "/habits",
   tag: "habit-" + id,
 });
-const phone: Subscription = { endpoint: "https://push/phone", p256dh: "k", auth: "a" };
-const laptop: Subscription = { endpoint: "https://push/laptop", p256dh: "k", auth: "a" };
+const phone: Subscription = { endpoint: "https://web.push.apple.com/phone", p256dh: "k", auth: "a" };
+const laptop: Subscription = { endpoint: "https://fcm.googleapis.com/fcm/send/laptop", p256dh: "k", auth: "a" };
 const gone = Object.assign(new Error("gone"), { statusCode: 410 });
 const flaky = Object.assign(new Error("push service down"), { statusCode: 503 });
 
@@ -138,4 +139,52 @@ test("isGone recognises 404 and 410 only", () => {
   assert.equal(isGone(flaky), false);
   assert.equal(isGone(null), false);
   assert.equal(isGone("x"), false);
+});
+
+test("isAllowedPushEndpoint accepts the real push services only", () => {
+  for (const ok of [
+    "https://fcm.googleapis.com/fcm/send/abc",
+    "https://updates.push.services.mozilla.com/wpush/v2/abc",
+    "https://web.push.apple.com/QAbc",
+    "https://api.sandbox.push.apple.com/3/device/abc",
+    "https://wns2-par02p.notify.windows.com/w/?token=abc",
+    "https://fcm.googleapis.com:443/fcm/send/abc",
+  ]) {
+    assert.equal(isAllowedPushEndpoint(ok), true, ok);
+  }
+  for (const bad of [
+    "http://fcm.googleapis.com/fcm/send/abc",
+    "https://evil.example/x",
+    "https://fcm.googleapis.com.evil.example/x",
+    "https://fcm.googleapis.com@evil.example/x",
+    "https://evilfcm.googleapis.com/x",
+    "https://push.apple.com.evil.example/x",
+    "https://127.0.0.1/x",
+    "https://169.254.169.254/latest/meta-data",
+    "https://fcm.googleapis.com:8443/x",
+    "https://user:pw@fcm.googleapis.com/x",
+    "not a url",
+    "",
+  ]) {
+    assert.equal(isAllowedPushEndpoint(bad), false, bad);
+  }
+});
+
+test("a stored endpoint outside the allowlist is removed and never contacted", async () => {
+  const poisoned: Subscription = { endpoint: "https://internal.example/hook", p256dh: "k", auth: "a" };
+  const { deps, calls } = fakes({ subs: [poisoned, phone] });
+  const summary = await processNotifications([note("d1")], deps);
+  assert.deepEqual(calls.sent, [phone.endpoint]);
+  assert.deepEqual(calls.removed, [poisoned.endpoint]);
+  assert.deepEqual(calls.released, []);
+  assert.equal(summary.removed, 1);
+});
+
+test("when every stored endpoint is disallowed nothing is sent and the claim is kept", async () => {
+  const poisoned: Subscription = { endpoint: "http://169.254.169.254/x", p256dh: "k", auth: "a" };
+  const { deps, calls } = fakes({ subs: [poisoned] });
+  await processNotifications([note("d1")], deps);
+  assert.deepEqual(calls.sent, []);
+  assert.deepEqual(calls.removed, [poisoned.endpoint]);
+  assert.deepEqual(calls.released, []);
 });

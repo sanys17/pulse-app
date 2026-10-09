@@ -43,6 +43,10 @@ begin
   if auth.uid() is null then
     raise exception 'not authenticated';
   end if;
+  -- Only real push services; otherwise the sender could be pointed at any URL (SSRF).
+  if p_endpoint !~ '^https://(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|([a-z0-9-]+\.)+push\.apple\.com|([a-z0-9-]+\.)+notify\.windows\.com)(:443)?/' then
+    raise exception 'invalid push endpoint';
+  end if;
   insert into public.push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
   values (auth.uid(), p_endpoint, p_p256dh, p_auth, p_user_agent)
   on conflict (endpoint) do update
@@ -108,3 +112,18 @@ language sql security definer set search_path = public as $$
   delete from public.notification_log where sent_at < now() - interval '3 days';
 $$;
 revoke all on function public.cleanup_notification_log() from public, anon, authenticated;
+grant execute on function public.cleanup_notification_log() to service_role;
+
+-- A bad time zone string would make pending_notifications() fail for everyone. Reject it on write.
+create or replace function public.validate_profile_timezone() returns trigger
+language plpgsql set search_path = public, pg_catalog as $$
+begin
+  if not exists (select 1 from pg_catalog.pg_timezone_names where name = new.timezone) then
+    raise exception 'invalid time zone: %', new.timezone;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists validate_profile_timezone on public.profiles;
+create trigger validate_profile_timezone before insert or update of timezone on public.profiles
+  for each row execute function public.validate_profile_timezone();

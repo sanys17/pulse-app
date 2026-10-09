@@ -209,5 +209,59 @@ do $$ declare a constant uuid := 'aaaaaaaa-0000-0000-0000-000000000001'; b const
   update public.notification_preferences set morning_summary = true where user_id = a;
 end $$;
 
+-- ===== [D] hardening (review findings) =====
+-- Device registration only accepts real push-service endpoints (blocks server-side request forgery).
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', true);
+do $$ declare e text; rejected boolean; begin
+  foreach e in array array[
+    'https://fcm.googleapis.com/fcm/send/abc',
+    'https://updates.push.services.mozilla.com/wpush/v2/abc',
+    'https://web.push.apple.com/QAbc',
+    'https://wns2-par02p.notify.windows.com/w/?token=abc'
+  ] loop
+    perform public.register_push_subscription(e, 'k', 'a', 'ua');
+  end loop;
+  foreach e in array array[
+    'http://fcm.googleapis.com/fcm/send/abc',
+    'https://evil.example/x',
+    'https://fcm.googleapis.com.evil.example/x',
+    'https://fcm.googleapis.com@evil.example/x',
+    'https://evilfcm.googleapis.com/x',
+    'https://127.0.0.1/x',
+    'https://169.254.169.254/latest/meta-data',
+    'https://fcm.googleapis.com:8443/x'
+  ] loop
+    rejected := false;
+    begin
+      perform public.register_push_subscription(e, 'k', 'a', 'ua');
+    exception when others then rejected := true;
+    end;
+    assert rejected, 'endpoint must be rejected: ' || e;
+  end loop;
+end $$;
+
+-- A bad time zone is rejected when written, and a row that got in anyway cannot break everyone's reminders.
+do $$ declare rejected boolean := false; begin
+  begin
+    update public.profiles set timezone = 'Not/AZone' where user_id = 'aaaaaaaa-0000-0000-0000-000000000001';
+  exception when others then rejected := true;
+  end;
+  assert rejected, 'an invalid time zone must be rejected on write';
+end $$;
+alter table public.profiles disable trigger validate_profile_timezone;
+update public.profiles set timezone = 'Foo/Bar' where user_id = 'aaaaaaaa-0000-0000-0000-000000000002'; -- B has a device, so the row is actually evaluated
+alter table public.profiles enable trigger validate_profile_timezone;
+do $$ begin
+  -- E2's first alert (09:00Z) has not been logged by the earlier dedupe test
+  assert pg_temp.cnt('2026-10-21 09:00:00+00', 'aaaaaaaa-0000-0000-0000-000000000001', 'calendar') = 1,
+    'one corrupt profile must not stop other users reminders';
+end $$;
+
+-- The cleanup job is callable by the server role, but not by clients.
+do $$ begin
+  assert has_function_privilege('service_role', 'public.cleanup_notification_log()', 'execute'), 'service_role may clean up';
+  assert not has_function_privilege('authenticated', 'public.cleanup_notification_log()', 'execute'), 'clients may not';
+end $$;
+
 select 'ALL TESTS PASSED' as result;
 rollback;

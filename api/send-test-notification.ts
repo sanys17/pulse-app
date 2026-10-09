@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 import webpush from "web-push";
-import { isGone } from "./_lib/notify.js";
+import { isAllowedPushEndpoint, isGone } from "./_lib/notify.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
@@ -40,6 +40,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let sent = 0;
   let removed = 0;
   for (const sub of subs) {
+    if (!isAllowedPushEndpoint(sub.endpoint)) {
+      await db.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
+      removed++;
+      continue;
+    }
     try {
       await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, {
         TTL: 60,

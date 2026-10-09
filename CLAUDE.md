@@ -41,6 +41,7 @@ Short version: tokens from `src/index.css` (`--color-*`, `--space-*`, `--radius-
 - `npm test` runs `node --test tests/*.test.mts` on pure modules. Pure modules in `src/lib` and `api/_lib` must have no imports except other pure modules, with `.ts` extensions, so node can load them.
 - Alerts follow Apple Calendar offsets, max two per item; `null` = default, `{}` = none (`src/lib/alerts.ts`).
 - The service worker (`src/sw.ts`) does not run in `npm run dev`; push can only be tested on the deployed HTTPS app, on iPhone only from the Home Screen icon.
+- Push endpoints are allowlisted to real push services (SQL regex in `register_push_subscription`, `isAllowedPushEndpoint` in `api/_lib/notify.ts`); extend both together if a new browser vendor needs another host. `profiles.timezone` is validated by a trigger.
 - Never expose `VAPID_PRIVATE_KEY`, `CRON_SECRET` or `SUPABASE_SERVICE_ROLE_KEY` to the client (no `VITE_` prefix).
 
 ## Supabase migrations
