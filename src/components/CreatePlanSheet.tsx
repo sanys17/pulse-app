@@ -109,14 +109,14 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
           style={{ ...inputStyle, height: "auto", padding: "var(--space-3)", resize: "none" }}
         />
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
           {(
             [
               { type: "date", label: "Date", value: date, set: setDate },
               { type: "time", label: "Time", value: time, set: setTime },
             ] as const
           ).map((f) => (
-            <div key={f.type} style={{ position: "relative" }}>
+            <div key={f.type} style={{ position: "relative", width: "100%", overflow: "hidden", borderRadius: "var(--radius-sm)" }}>
               <input
                 type={f.type}
                 value={f.value}
@@ -125,6 +125,11 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
                 style={{
                   ...inputStyle,
                   colorScheme: "dark",
+                  display: "block",
+                  minWidth: 0,
+                  maxWidth: "100%",
+                  WebkitAppearance: "none",
+                  appearance: "none",
                   color: f.value ? "var(--color-text)" : "transparent",
                 }}
               />
