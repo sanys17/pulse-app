@@ -250,6 +250,8 @@ button {
 :root {
   /* Distance of the floating nav and plus button from the bottom edge; page padding and toasts derive from it. */
   --nav-offset: 34px;
+  /* Never closer to the bottom edge than the home-indicator area. */
+  --nav-bottom: max(var(--nav-offset), env(safe-area-inset-bottom, 0px));
   --color-success: #66BB6A;
   --color-info: #64B5F6;
   --color-danger: #E5484D;
@@ -285,4 +287,49 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .press:active:not(:disabled) { transform: none; opacity: 0.7; }
   .fade-up, .pop { animation: none; }
+}
+
+
+/* ─── Floating chrome: one glass material (see docs/design-system.md section 5) ─── */
+.glass {
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.08) 0%, transparent 50%),
+    rgba(20, 20, 30, 0.75);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.scrim {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass { background: var(--color-surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .scrim { background: rgba(0, 0, 0, 0.6); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+/* ─── Quick-actions menu: items grow out of the plus button and fold back into it ─── */
+@keyframes navFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes navFadeOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes menuIn {
+  from { opacity: 0; transform: translateY(var(--d)) scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes menuOut {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(var(--d)) scale(0.6); }
+}
+.menu-item { transform-origin: right bottom; }
+/* "backwards" only: after the animation the element's own transform applies, so .press still works. */
+.menu-item.in { animation: menuIn 260ms cubic-bezier(0.2, 0.8, 0.2, 1) var(--delay, 0ms) backwards; }
+.menu-item.out { animation: menuOut 200ms cubic-bezier(0.4, 0, 1, 1) var(--delay, 0ms) forwards; }
+.scrim.in { animation: navFadeIn 200ms ease backwards; }
+.scrim.out { animation: navFadeOut 200ms ease forwards; }
+.fab-icon { transition: transform 300ms cubic-bezier(0.34, 1.3, 0.64, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .menu-item.in { animation: navFadeIn 120ms ease backwards; }
+  .menu-item.out { animation: navFadeOut 120ms ease forwards; }
+  .fab-icon { transition: none; }
 }

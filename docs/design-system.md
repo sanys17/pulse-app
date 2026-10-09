@@ -63,7 +63,7 @@ Two surfaces are canonical. Pick by what the surface is.
 
 **Card (default content surface):** `background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-4)`. Nested/raised areas inside a card use `--color-surface-dim`.
 
-**Glass (floating chrome: bottom nav, FAB, sheets, popovers):**
+**Glass (floating chrome: bottom nav, FAB, sheets, popovers). Use the `.glass` class (it already has the reduced-transparency fallback):**
 ```
 background: rgba(20,20,30,0.75);
 backdrop-filter: blur(20px) saturate(180%);
@@ -89,7 +89,7 @@ Never stack a light translucent surface on another. Always include the `-webkit-
 
 | Component | File | Notes |
 |---|---|---|
-| Bottom nav | `components/BottomNav.tsx` | Glass pill, 4 icon tabs at 44px + separate FAB (44px circle). Active = filled icon + `rgba(255,255,255,0.08)` pill |
+| Bottom nav | `components/BottomNav.tsx` | `.glass` pill with 3 icon links (real `<nav>` + `aria-current`, request count in the label) and a separate plus button. Position from `--nav-bottom` (never closer than the home indicator). The plus opens a menu that grows out of it and folds back (nearest-first in, farthest-first out; no overshoot), supports press-and-slide to choose, Escape, and `aria-expanded`/`role="menu"`. A soft gradient fades content under the controls |
 | Habit card | `components/HabitCard.tsx` | Habit color tint + icon, tap toggles completion |
 | Habit form | `components/HabitForm.tsx` | Sheet; icon picker + six color swatches |
 | Quick log | `components/QuickLog.tsx` | Fast completion list for today |
