@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { subscribeToTables } from "../lib/realtime";
 import type { FeedEntry } from "../types";
 
 const PAGE_SIZE = 20;
@@ -10,23 +11,24 @@ export function useActivityFeed() {
   const [entries, setEntries] = useState<FeedEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
+  const loadedCount = useRef(0);
 
   const fetchPage = useCallback(
-    async (offset: number = 0, append: boolean = false) => {
+    async (offset: number = 0, append: boolean = false, limit: number = PAGE_SIZE) => {
       if (!user) return;
 
       const { data: rows } = await supabase
         .from("activity_feed")
         .select("*")
         .order("created_at", { ascending: false })
-        .range(offset, offset + PAGE_SIZE - 1);
+        .range(offset, offset + limit - 1);
 
       if (!rows) {
         setLoading(false);
         return;
       }
 
-      if (rows.length < PAGE_SIZE) setHasMore(false);
+      if (rows.length < limit) setHasMore(false);
 
       const userIds = [...new Set(rows.map((r) => r.user_id))];
       const profileMap = new Map<string, { name: string; avatarUrl: string | null }>();
@@ -52,6 +54,7 @@ export function useActivityFeed() {
         userAvatar: profileMap.get(r.user_id)?.avatarUrl ?? null,
       }));
 
+      loadedCount.current = append ? loadedCount.current + mapped.length : mapped.length;
       setEntries((prev) => (append ? [...prev, ...mapped] : mapped));
       setLoading(false);
     },
@@ -61,11 +64,17 @@ export function useActivityFeed() {
   useEffect(() => {
     fetchPage(0, false);
 
+    // Refresh everything already loaded so "load more" pages are not collapsed.
+    const refresh = () => fetchPage(0, false, Math.max(PAGE_SIZE, loadedCount.current));
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") fetchPage(0, false);
+      if (document.visibilityState === "visible") refresh();
     };
     document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    const unsubscribe = subscribeToTables(["activity_feed"], refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      unsubscribe();
+    };
   }, [fetchPage]);
 
   const loadMore = useCallback(async () => {

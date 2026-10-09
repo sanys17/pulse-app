@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { subscribeToTables } from "../lib/realtime";
 import type { SharedPlan, PlanMember, ChecklistItem } from "../types";
 
 export interface PlanWithMembers extends SharedPlan {
@@ -95,7 +96,11 @@ export function useSharedPlans() {
       if (document.visibilityState === "visible") fetchAll();
     };
     document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    const unsubscribe = subscribeToTables(["shared_plans", "plan_members"], fetchAll);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      unsubscribe();
+    };
   }, [fetchAll]);
 
   const createPlan = useCallback(
