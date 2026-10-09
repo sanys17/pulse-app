@@ -132,7 +132,6 @@ export function CreatePlanSheet({ friends, onCreate, onClose, onCreated }: Creat
                   ...inputStyle,
                   paddingLeft: 40,
                   colorScheme: "dark",
-                  display: "block",
                   minWidth: 0,
                   maxWidth: "100%",
                   WebkitAppearance: "none",

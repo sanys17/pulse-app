@@ -329,3 +329,17 @@ button {
   .menu-item.out { animation: navFadeOut 120ms ease forwards; }
   .fab-icon { transition: none; }
 }
+
+/* iOS draws date/time values top-aligned and with extra margin; centre them in the 44px field */
+input[type="date"],
+input[type="time"] {
+  display: flex;
+  align-items: center;
+  line-height: normal;
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+  min-height: 1.2em;
+}
