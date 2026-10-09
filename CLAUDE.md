@@ -31,6 +31,7 @@ Short version: tokens from `src/index.css` (`--color-*`, `--space-*`, `--radius-
 ## Monitoring
 - `src/lib/monitoring.ts` reports to Better Stack (or Sentry) via the Sentry SDK; it is a no-op without `VITE_SENTRY_DSN` and only active in production builds. Privacy: `dataCollection` is locked down (no cookies, headers, bodies, query strings) and only the anonymous user id is attached. Keep it that way.
 - Every Supabase request goes through `monitoredFetch` (set in `src/lib/supabase.ts`), so failed requests are reported centrally. Expected failures are listed in `src/lib/monitoringRules.ts` (duplicate `23505`, `.single()` with no row `PGRST116`, auth 4xx); add to it rather than sprinkling try/catch.
+- `vite.config.ts` uploads source maps (Sentry Vite plugin, Better Stack endpoint) only when `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` and `SENTRY_URL` are set (Vercel build env). Never give them a `VITE_` prefix and never commit them. Upload errors only warn.
 - A write that "succeeds" with 0 rows is how RLS bugs hide. For important updates/deletes use `.select("id")` and `expectRows("table.operation", data)`.
 - New code: surface errors to the user (toast) and report unexpected ones with `reportError(err, { area, target })`; never swallow them silently.
 

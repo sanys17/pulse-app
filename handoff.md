@@ -25,13 +25,10 @@ Applied (evidenced by plans working in the app): `001_initial_schema.sql`, `003_
 - Supabase Auth, Redirect URLs must contain `http://localhost:5173/**` and `http://charlie.local:5173/**` (plus the Vercel URL). The `http://192.168.0.65:5173/**` entry was rejected by Supabase even when correctly saved, so the app redirected sign-in to the live Site URL. Diagnose with the error-callback probe: `GET /auth/v1/authorize?provider=google&redirect_to=X`, then `GET /auth/v1/callback?error=access_denied&state=<state from the Location header>`; its `Location` shows the validated redirect (X if accepted, the Site URL if not).
 - The app sends `redirectTo: ${window.location.origin}/` (trailing slash).
 
-## Monitoring (code done, needs your setup)
-Code is merged-ready on the branch: `monitoredFetch`, `expectRows` write checks, error boundary, anonymous user id. To switch it on:
-1. Better Stack: create an error-tracking application (platform: React / Sentry SDK) and copy the DSN. Pick the EU data location if offered.
-2. Vercel project, Environment Variables: add `VITE_SENTRY_DSN` (Production) and redeploy. Optionally enable "Automatically expose System Environment Variables" so releases are tagged with the commit.
-3. Add alert rules (start with email on new errors only) and an uptime monitor for the live URL.
-4. Verify after deploy: in the live site's browser console run `setTimeout(() => { throw new Error("test alert") })` and check it arrives.
-Not verified: whether Better Stack readable stack traces need source map upload (production code is minified); check the first real error.
+## Monitoring (live)
+Better Stack error tracking (US region; EU needs a paid plan), app `Pulse-web`. `VITE_SENTRY_DSN` is set in Vercel (Production). Verified 2026-10-09: a console test error arrived tagged `production` with an anonymous user. Code: `monitoredFetch`, `expectRows` write checks, error boundary (see `CLAUDE.md`).
+- **Stack traces were minified** (`index-xxxx.js at line 25:14081`). Source map upload is built on branch `feat/source-maps` (Sentry Vite plugin pointed at Better Stack). It is inert until these are set in Vercel as **build** variables (no `VITE_` prefix, never exposed to the browser): `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_URL` (from Better Stack, Errors, Applications, Pulse-web, Advanced settings) and `SENTRY_AUTH_TOKEN` (a Telemetry API token). Upload failures only warn; they never fail a deploy. Maps are deleted from `dist` after upload. Not verified with a real token yet: check the next real error shows the file and line.
+- Still to do by the user: email alert rule for new errors, and an uptime monitor for `https://pulse-app-habit.vercel.app` (the existing monitor points at `matyassana.com`).
 
 ## Known issues (not fixed)
 1. **Friends' names/avatars (fix merged and applied; the two-account live-update test passed, but names/avatars were not separately confirmed).** `profiles` RLS was own-row-only; migration 005 adds `can_view_profile()` and a SELECT policy for pending/accepted friends and plan co-members. Verify with two accounts (friends list, requests, feed, shared plan). Username search still shows blank names for unconnected users by design.
