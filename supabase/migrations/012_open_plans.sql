@@ -36,7 +36,11 @@ language sql security definer stable set search_path = public as $$
      and (select count(*) from public.plan_members pm where pm.plan_id = p_plan_id) < 20;
 $$;
 
-grant execute on function public.are_friends(uuid, uuid), public.can_see_open_plan(uuid), public.can_join_plan(uuid) to authenticated;
+-- are_friends takes two arbitrary user ids, so clients must not call it (it would reveal who is friends with whom).
+-- Only the other helpers use it, and they run as the owner. The other two only look at auth.uid().
+revoke execute on function public.are_friends(uuid, uuid) from public, anon, authenticated;
+revoke execute on function public.can_see_open_plan(uuid), public.can_join_plan(uuid) from public, anon;
+grant execute on function public.can_see_open_plan(uuid), public.can_join_plan(uuid) to authenticated;
 
 -- 3) Visibility: friends of the creator can see an open plan and who is in it
 drop policy if exists "Members and creator see plans" on public.shared_plans;
