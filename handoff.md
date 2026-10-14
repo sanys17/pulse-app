@@ -1,9 +1,11 @@
 # Pulse: Handoff (current state)
 
-Last updated: 2026-10-09. Update this file at the end of any session that changes project state; it is imported into `CLAUDE.md`, so every session reads it first.
+Last updated: 2026-10-15. Update this file at the end of any session that changes project state; it is imported into `CLAUDE.md`, so every session reads it first.
 
 ## Status
-All on `master`, deployed on Vercel, `npm run build` passes. No test runner exists; nothing is verified except by build and manual device testing.
+Mostly on `master`, deployed on Vercel, `npm run build` passes. No test runner exists; nothing is verified except by build and manual device testing.
+
+**Current branch `home-redesign-v2` has zero commits — a full session of home-screen work exists only as uncommitted working-tree changes.** See "Home redesign (in progress)" below before doing anything destructive.
 
 | Area | State |
 |---|---|
@@ -17,6 +19,24 @@ All on `master`, deployed on Vercel, `npm run build` passes. No test runner exis
 | Social tab redesign: needs-you requests, upcoming plans, friends' activity with one-tap cheers, owner deletes (feed entries with Undo; a plan's activity entry deletes the plan after a confirm), drag-to-dismiss sheets, 44px targets, tokens | Done, merged (PR #10). `008_feed_reactions.sql` run by the user. Not yet confirmed end to end on a device |
 | Open plans (any friend can join, max 20), Leave plan, @username under names, stale-fetch fix for deleted plans | On PR #15 (`style/nav-higher`). **Needs `012_open_plans.sql` run in the SQL Editor right before deploying.** It also tightens plan_members insert (the old policy let anyone add themselves to any plan). RLS, cap and join notification checked in a local PGlite replay only; not tested on a device |
 | **Push notifications** | **Live** (PR #13). Server sender via Supabase pg_cron every minute (heartbeat in Better Stack), custom service worker, Settings section. Verified: scheduler returns 200 and a test notification reaches the iPhone Home Screen app. Branch `feat/per-item-reminders` replaces global alert/time settings with per-event, per-plan and per-habit reminders (needs migration 011, run right before deploying it). Not yet confirmed one by one: habit, event, plan, invitation, friend request and morning notifications on a real device. Runbook: `docs/notifications-runbook.md` |
+
+## Home redesign (in progress, `home-redesign-v2`, uncommitted)
+Nothing here is committed and the branch is level with `master`. `npx tsc -b` and `npm run build` pass. Not tested on a device.
+
+**Hero progress arc** (`src/pages/Home.tsx`). Oura-style shallow gauge: the top slice of a large circle, geometry in module constants near the top of the file (`ARC_R` 198, `ARC_CX` 170, `ARC_HALF_CHORD` 155, `ARC_W` 11, `ARC_BOX_W/H`). Everything derives from those — the track path, the clip ribbon, the viewBox and the overlay sizes — so changing `ARC_W` alone is safe. Three layers stacked at a strict 1:1 scale: a track `<svg>`, the shader overlay, and a glow `<svg>`. They must all stay fixed-width, because the shader is clipped with `clipPathUnits="userSpaceOnUse"`, whose units are raw CSS pixels; `width: "100%"` on any of them desyncs the clip on screens narrower than 340px.
+
+- **Water fill** is `NeuroNoise` from `@paper-design/shaders-react`, clipped to the filled part of the arc by `buildArcClip()`. Earlier attempts that all failed and should not be retried: SVG animated patterns, CSS dashes, rAF-driven SVG gradients, `feTurbulence` + `feDisplacementMap` (pixelated), a hand-written WebGL shader in `<foreignObject>` (WebKit will not render a WebGL context there).
+- **Fill animation** springs from empty via `animateSpring` (`src/lib/spring.ts`, `response: 0.55`, `damping: 1`), writing `d` and the glow position straight to the DOM through refs so a fill does not re-render the page. Interruptible, and snaps to final under `prefers-reduced-motion`.
+- **Leading-edge glow** is a halo + core circle repositioned to the arc tip each frame by `arcTip()`.
+
+**Known not-done on this branch**
+- `src/App.tsx` has an auth bypass — `if (!user && import.meta.env.PROD)` — so dev skips sign-in. **Revert before merging.**
+- `package.json` still lists `react-circular-progressbar`; it is no longer imported anywhere. Remove it.
+- `bgImage` is hardcoded to `/assets/mount.webp` with a `TODO`; time-of-day switching is disabled.
+- The Daily/Social toggle in the hero does nothing yet.
+- Background photos in `public/assets` (morning/afternoon/night/mount/mount_day/mount_night, `.jpg` + `.webp`) are untracked and uncommitted.
+
+**Background direction (decided 2026-10-15, not built).** Brainstormed with the user against mockups. The problem is not the photo's mood — it is that the arc and streak number straddle two surfaces (open sky and textured rock), so neither looks like it belongs to one thing. Agreed direction: **sky only, no horizon** — a real photograph (the user explicitly wants photographic depth and grain, not a flat gradient), one distinct sky per time of day, crossfading on clock boundaries, stars at night. The mountain goes. Consequence: the heavy radial scrim behind the hero text exists only because the photo was busy, so on an even sky it can be lightened or dropped. Open: the existing photos cannot be cropped to pure sky, so new sky assets are needed; sourcing was not settled. Brainstorm mockups are in `.superpowers/brainstorm/` (gitignored).
 
 ## Supabase (user runs SQL manually in the SQL Editor)
 Applied (evidenced by plans working in the app): `001_initial_schema.sql`, `003_social.sql`, `004_fix_plan_policies.sql`., `005_friend_profile_visibility.sql` (run by the user, 2026-10-09). `006_friendships_realtime.sql` and `007_social_realtime.sql` (run by the user, 2026-10-09; verified working with two accounts), `008_feed_reactions.sql` (run by the user). Not confirmed from the repo: whether Google OAuth is configured in Supabase and whether `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set in Vercel (the app throws on startup without them). Ask the user if sign-in or a deploy misbehaves.
@@ -43,12 +63,14 @@ Better Stack error tracking (US region; EU needs a paid plan), app `Pulse-web`. 
 8. Settings shows Google Calendar and Ultrahuman as "Coming Soon" (cloud session change).
 
 ## Next steps (suggested order)
-1. Live updates for own-data tables (habits, completions, tasks, calendar events) with an echo guard.
-2. Design cleanup: tokens for accent/status colors, one glass recipe, contrast fixes.
-3. Finish verifying push notifications on a real iPhone: habit, event (two alerts), plan, invitation, friend request, morning summary (runbook section 7).
-4. Add error surfacing to hooks (issue 3).
+1. Commit the `home-redesign-v2` work — it is currently one power cut away from gone.
+2. Finish the home redesign: source sky assets, build the time-of-day sky, then revert the auth bypass and drop `react-circular-progressbar`.
+3. Live updates for own-data tables (habits, completions, tasks, calendar events) with an echo guard.
+4. Design cleanup: tokens for accent/status colors, one glass recipe, contrast fixes.
+5. Finish verifying push notifications on a real iPhone: habit, event (two alerts), plan, invitation, friend request, morning summary (runbook section 7).
+6. Add error surfacing to hooks (issue 3).
 
 ## Working with this repo
 - Tooling and rules live in `CLAUDE.md`; UI rules in `docs/design-system.md`. Git: branch, PR into `master`, do not push or merge without being asked.
 - A cloud Claude session also works on this repo. `git fetch` and check `gh pr list` before assuming local state is current.
-- Specs and plans: `docs/superpowers/specs/`, `docs/superpowers/plans/` (process: brainstorm, spec, plan, execute).
+- Specs and plans: `docs/superpowers/specs/`, `docs/superpowers/plans/` (process: brainstorm, spec, plan, execute). The `superpowers` plugin was installed 2026-10-15 (`obra/superpowers-marketplace`, user scope); before that these directories existed without the tooling that made them.
