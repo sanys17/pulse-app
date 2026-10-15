@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef, useCallback, useLayoutEffect, useEffect, lazy, Suspense } from "react";
+import { useState, useMemo, useRef, useCallback, useLayoutEffect, useEffect, lazy, Suspense, Component } from "react";
+import type { ReactNode } from "react";
 import { NeuroNoise } from "@paper-design/shaders-react";
 import { animateSpring } from "../lib/spring";
 import { useNavigate } from "react-router-dom";
@@ -273,6 +274,39 @@ const CROSSFADE_MS = 6000;
 // Suspense fallback is `null`: nothing renders while the chunk arrives, so there is no flash.
 const NightSky = lazy(() => import("../components/NightSky"));
 
+/**
+ * Keeps a failed night sky local.
+ *
+ * `Suspense` covers the chunk *loading*; nothing covers it *failing*. The only other error
+ * boundary in the app is the root Sentry one in `src/main.tsx`, so without this a rejected
+ * `import("../components/NightSky")` would propagate all the way up and blank the whole app.
+ * That is not an exotic trigger for an installed PWA: a stale cached shell after a deploy, or
+ * simply being offline the first time the chunk is needed, is enough.
+ *
+ * Failing here degrades to "no stars tonight" — the photograph, the light layers, the grain,
+ * the scrim and every bit of hero content carry on untouched. The boundary lives inside
+ * SkyLayer, which is keyed by phase, so the next time the night phase mounts it is a fresh
+ * instance and the import is retried.
+ *
+ * It catches a throw from inside NightSky's own render too, not just a failed import, hence
+ * the `night-sky-render` target. NightSky already reports its own recoverable failures.
+ */
+class NightSkyBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error) {
+    reportError(error, { area: "sky", target: "night-sky-render" });
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
@@ -342,6 +376,10 @@ function SkyLayer({
 }) {
   const src = SKY_IMAGES[phase];
   const day = phase === "night" ? null : phase;
+  // The sun anchor needs the photograph's intrinsic size to undo the cover crop, so if the
+  // image fails to load `size` never arrives, `sun` stays null and a day phase renders no sun
+  // glow or beams at all. That is deliberate: a glow anchored to a guessed position on a sky
+  // that is not there would be worse than no glow. The failed load is reported (onLoadError).
   const sun =
     day && size && panelW > 0
       ? imagePointToPanel(PROVISIONAL_SUN[day], panelW, PANEL_H, size.w, size.h)
@@ -379,9 +417,11 @@ function SkyLayer({
       {day && sun && <SkyLight phase={day} sunX={sun.x} sunY={sun.y} active={active} />}
       {phase === "afternoon" && <SkyClouds active={active} />}
       {phase === "night" && panelW > 0 && (
-        <Suspense fallback={null}>
-          <NightSky observer={observer} width={panelW} height={PANEL_H} active={active} />
-        </Suspense>
+        <NightSkyBoundary>
+          <Suspense fallback={null}>
+            <NightSky observer={observer} width={panelW} height={PANEL_H} active={active} />
+          </Suspense>
+        </NightSkyBoundary>
       )}
     </div>
   );
