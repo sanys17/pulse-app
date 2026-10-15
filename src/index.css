@@ -417,3 +417,33 @@ input[type="time"]::-webkit-date-and-time-value {
 @media (prefers-reduced-motion: reduce) {
   .sky-glow, .sky-morning .sky-beam, .sky-afternoon .sky-beam { animation: none; }
 }
+
+/* Afternoon clouds: minimal drift. The track holds two identical groups; moving it by
+   -50% is exactly one group width, so the wrap lands on an identical picture. 240s per
+   traverse (5px/s). Transform only. */
+.sky-clouds-track {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  display: flex;
+  will-change: transform;
+  animation: skyCloudDrift 240s linear infinite;
+}
+.sky-clouds-group {
+  position: relative;
+  flex: none;
+  height: 100%;
+}
+.sky-puff {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255,255,255,1), rgba(255,255,255,0.45) 55%, transparent 100%);
+}
+@keyframes skyCloudDrift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sky-clouds-track { animation: none; will-change: auto; }
+}
