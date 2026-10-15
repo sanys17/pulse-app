@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback, useLayoutEffect, useEffect, lazy, Suspense, Component } from "react";
+import { useState, useMemo, useRef, useCallback, useLayoutEffect, useEffect, lazy, Suspense, Component, type CSSProperties } from "react";
 import type { ReactNode } from "react";
 import { NeuroNoise } from "@paper-design/shaders-react";
 import { animateSpring } from "../lib/spring";
@@ -182,12 +182,27 @@ const geist = "Geist, Inter, system-ui, sans-serif";
 const ARC_R = 198;
 const ARC_CX = 170;
 const ARC_HALF_CHORD = 155;
-const ARC_W = 11;
+const ARC_W = 8;
 const ARC_BASE_Y = 85;
 const ARC_BOX_W = 340;
 const ARC_BOX_H = Math.ceil(ARC_BASE_Y + ARC_W / 2 + 1);
 const ARC_CY = ARC_BASE_Y + Math.sqrt(ARC_R * ARC_R - ARC_HALF_CHORD * ARC_HALF_CHORD);
 const ARC_HALF = Math.acos(ARC_HALF_CHORD / ARC_R);
+// Gauge scale labels, pinned under the arc's own endpoints (ARC_CX +/- ARC_HALF_CHORD),
+// not the box edges, so they stay with the arc if its geometry changes.
+const SCALE_LABEL_BASE: CSSProperties = {
+  position: "absolute",
+  top: ARC_BASE_Y + 12,
+  width: 48,
+  textAlign: "center",
+  fontWeight: 500,
+  fontSize: 12,
+  color: "rgba(234,236,244,0.55)",
+  textShadow: "0 1px 6px rgba(7,7,12,0.6)",
+};
+const SCALE_LABEL_LEFT: CSSProperties = { ...SCALE_LABEL_BASE, left: ARC_CX - ARC_HALF_CHORD - 24 };
+const SCALE_LABEL_RIGHT: CSSProperties = { ...SCALE_LABEL_BASE, left: ARC_CX + ARC_HALF_CHORD - 24 };
+
 const ARC_PATH = `M ${ARC_CX - ARC_HALF_CHORD},${ARC_BASE_Y} A ${ARC_R},${ARC_R} 0 0,1 ${ARC_CX + ARC_HALF_CHORD},${ARC_BASE_Y}`;
 // Vertical focal point of the hero photo. Lower values show more sky, which
 // drops the summit further down the panel. Tune this to seat the peak inside
@@ -281,6 +296,26 @@ const NIGHT_SKY =
 // Dev-only escape hatch: ?sky=morning|afternoon|night forces a phase, so all three skies can
 // be checked on a real device without waiting out the clock. Stripped from production builds
 // by the import.meta.env.DEV guard, so the live app always follows the actual time.
+// Dev-only: ?hero=v2 previews an alternative hero — the arc owns the screen with the day's
+// percentage inside it, Next Up moves directly underneath, and the streak demotes to a chip
+// beside the date. The point is to resolve the arc-versus-streak competition by weight rather
+// than by deleting either of them. Stripped from production builds.
+function useHeroV2(): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(window.location.search).get("hero") === "v2";
+}
+
+/** One short line under the percentage, earned rather than automatic. Deliberately not
+ *  personalised: Home has no profile hook, and adding one for a preview would be a new data
+ *  dependency. If the name is wanted, useProfile() is where it comes from. */
+function praiseFor(pct: number): string {
+  if (pct >= 100) return "Every habit done today";
+  if (pct >= 70) return "Almost there for today";
+  if (pct >= 30) return "Good start, keep going";
+  if (pct > 0) return "The first one is the hardest";
+  return "Nothing done yet today";
+}
+
 function currentSkyPhase(): SkyPhase {
   if (import.meta.env.DEV) {
     const forced = new URLSearchParams(window.location.search).get("sky");
@@ -541,6 +576,7 @@ export function Home(_props: HomeProps) {
   const fakeHabitsDone = useMemo(() => Object.values(fakeHabitState).filter(Boolean).length, [fakeHabitState]);
   const fakeHabitsTotal = FAKE_HABITS.length;
 
+  const heroV2 = useHeroV2();
   const displayStreak = usingFakeHabits ? 12 : dailyStreak;
   const displayBest = usingFakeHabits ? 14 : bestDailyStreak;
   const displayDone = usingFakeHabits ? fakeHabitsDone : todaysProgress.done;
@@ -913,9 +949,9 @@ export function Home(_props: HomeProps) {
               <NeuroNoise
                 width={ARC_BOX_W}
                 height={ARC_BOX_H}
-                colorFront="#F4F7FF"
-                colorMid="#BFCAE8"
-                colorBack="#97A4CC"
+                colorFront="#2A2A3C"
+                colorMid="#1C1C2A"
+                colorBack="#121220"
                 brightness={0.35}
                 contrast={0.6}
                 speed={0.9}
@@ -951,23 +987,46 @@ export function Home(_props: HomeProps) {
                 so marginTop must stay above about -66 or the number touches the stroke.
                 At -20 the number's top is at y=72, leaving ~53px of clearance. */}
             <div style={{
-              marginTop: -20,
+              marginTop: heroV2 ? -46 : -20,
               display: "flex",
-              justifyContent: "center",
+              flexDirection: "column",
+              alignItems: "center",
             }}>
               <span style={{
                 fontFamily: geist,
                 fontWeight: 700,
-                fontSize: 64,
+                fontSize: heroV2 ? 52 : 64,
                 color: "#EAECF4",
                 lineHeight: 1,
                 letterSpacing: "-0.02em",
                 textShadow: "0 2px 16px rgba(7,7,12,0.8)",
               }}>
-                {displayStreak}
+                {heroV2 ? progressPct : displayStreak}
+                {heroV2 && <span style={{ fontSize: 24, fontWeight: 600 }}>%</span>}
               </span>
+              {heroV2 && (
+                <span style={{
+                  fontFamily: geist,
+                  fontWeight: 500,
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.8)",
+                  marginTop: 7,
+                  textShadow: "0 1px 6px rgba(7,7,12,0.6)",
+                }}>
+                  {praiseFor(progressPct)}
+                </span>
+              )}
             </div>
+            {/* Scale labels: the gauge means nothing without them once it holds a value.
+                Pinned to the arc's own endpoints rather than the box edges. */}
+            {heroV2 && (
+              <>
+                <span style={SCALE_LABEL_LEFT}>0</span>
+                <span style={SCALE_LABEL_RIGHT}>100</span>
+              </>
+            )}
           </div>
+          {!heroV2 && (
           <span style={{
             fontFamily: geist,
             fontWeight: 600,
@@ -978,6 +1037,8 @@ export function Home(_props: HomeProps) {
           }}>
             Day Streak
           </span>
+          )}
+          {!heroV2 && (
           <span style={{
             fontFamily: geist,
             fontWeight: 400,
@@ -988,6 +1049,7 @@ export function Home(_props: HomeProps) {
           }}>
             Best: {displayBest} days
           </span>
+          )}
         </div>
 
         {/* Next Up — inside the hero image */}
