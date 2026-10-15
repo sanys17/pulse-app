@@ -3,6 +3,7 @@ import { STARS } from "../data/stars";
 import { projectStars, rareNight, type ProjectedStar, type RareNight } from "../lib/sky";
 import { rareCandidates } from "../lib/skyBodies";
 import type { Observer } from "../lib/observer";
+import { reportError } from "../lib/monitoring";
 
 const RECOMPUTE_MS = 5 * 60 * 1000;
 const GROUP_CLASSES = ["sky-twinkle-a", "sky-twinkle-b", "sky-twinkle-c"] as const;
@@ -14,13 +15,16 @@ function compute(observer: Observer, width: number, height: number): SkyState {
   // and candidates are re-sampled on every recompute (never cached across ticks).
   const now = new Date();
   const stars = projectStars(STARS, observer, now, width, height);
+  // rareNight keys its verdict to the local night internally; do not add a cache here.
   // A null here is not "tonight is not rare": the body may simply be off the panel at
   // this instant. Nothing is cached as a negative; every tick asks again.
   let rare: RareNight = null;
   try {
     rare = rareNight(rareCandidates(now, observer), observer, now, width, height);
-  } catch {
-    rare = null; // decorative; a failure in the rare night must not take the stars down
+  } catch (err) {
+    // Decorative: stars stay drawn and the rare body is skipped, but the failure is reported.
+    reportError(err, { area: "night-sky", target: "rareNight" });
+    rare = null;
   }
   return { stars, rare };
 }
@@ -38,7 +42,7 @@ export default function NightSky({
   active: boolean;
 }) {
   const [sky, setSky] = useState<SkyState>({ stars: [], rare: null });
-  const gradientId = useId();
+  const gradientId = `sky-band-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   useEffect(() => {
     if (!active) return;
@@ -59,6 +63,12 @@ export default function NightSky({
       aria-hidden="true"
       style={{ position: "absolute", inset: 0, display: "block", pointerEvents: "none" }}
     >
+      <defs>
+        <radialGradient id={gradientId}>
+          <stop offset="0%" stopColor="#c9d3ff" stopOpacity="0.32" />
+          <stop offset="100%" stopColor="#c9d3ff" stopOpacity="0" />
+        </radialGradient>
+      </defs>
       {groups.map((group, g) => (
         <g key={g} className={GROUP_CLASSES[g]}>
           {group.map((s, i) => (
@@ -68,12 +78,6 @@ export default function NightSky({
       ))}
       {rare?.kind === "galaxy" && (
         <g transform={`translate(${rare.x} ${rare.y}) rotate(${rare.angle})`}>
-          <defs>
-            <radialGradient id={gradientId}>
-              <stop offset="0%" stopColor="#c9d3ff" stopOpacity="0.32" />
-              <stop offset="100%" stopColor="#c9d3ff" stopOpacity="0" />
-            </radialGradient>
-          </defs>
           <ellipse rx={rare.length / 2} ry={Math.min(48, rare.length / 6)} fill={`url(#${gradientId})`} />
         </g>
       )}
