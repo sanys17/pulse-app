@@ -284,9 +284,10 @@ const NightSky = lazy(() => import("../components/NightSky"));
  * simply being offline the first time the chunk is needed, is enough.
  *
  * Failing here degrades to "no stars tonight" — the photograph, the light layers, the grain,
- * the scrim and every bit of hero content carry on untouched. The boundary lives inside
- * SkyLayer, which is keyed by phase, so the next time the night phase mounts it is a fresh
- * instance and the import is retried.
+ * the scrim and every bit of hero content carry on untouched. That degradation is permanent
+ * for the life of the page: React caches a rejected `lazy` payload, so mounting the night
+ * phase again gives a fresh boundary that re-renders the same rejection without attempting
+ * another request. Only a reload retries the chunk.
  *
  * It catches a throw from inside NightSky's own render too, not just a failed import, hence
  * the `night-sky-render` target. NightSky already reports its own recoverable failures.
@@ -565,8 +566,8 @@ export function Home(_props: HomeProps) {
     reportError(new Error(`sky image failed to load: ${src}`), { area: "sky", target: "image" });
   };
 
-  // Whether the incoming photograph has decoded. The crossfade waits for it, so it never fades
-  // in an empty layer, but it does not wait forever (see below).
+  // Whether the incoming photograph has decoded. The crossfade waits for it (see below), so it
+  // can never fade in an empty layer.
   const incomingLoaded = skyImgSizes[SKY_IMAGES[skyPhaseNow]] !== undefined;
 
   // NightSky is laid out in raw pixels, so the panel's width has to be measured rather than
@@ -628,16 +629,17 @@ export function Home(_props: HomeProps) {
   // cancel the teardown timer.
   //
   // The 50ms is just long enough for the browser to paint opacity 0 with the transition in
-  // place. If the incoming photograph has not decoded yet the start is held back, so the fade
-  // cannot reveal an empty layer — but only up to STALL_MS, after which it proceeds anyway
-  // rather than leaving yesterday's sky on screen because an asset is missing.
+  // place. Nothing starts until the incoming photograph has decoded: fading onto a layer that
+  // is not there yet would black the panel out and then pop the photo in. There is no timeout
+  // on that wait, because the alternative to waiting is exactly that blackout — the outgoing
+  // sky is already on screen and decoded, so holding it is strictly better. If the incoming
+  // asset never arrives the previous sky simply stays up (the failure is reported in
+  // noteSkyImgError) until the next reload.
   useEffect(() => {
-    if (!outgoingPhase) return;
+    if (!outgoingPhase || !incomingLoaded) return;
     const PAINT_MS = 50;
-    const STALL_MS = 4000;
-    const startIn = incomingLoaded ? PAINT_MS : STALL_MS;
-    const start = window.setTimeout(() => setIncomingShown(true), startIn);
-    const end = window.setTimeout(() => setOutgoingPhase(null), startIn + CROSSFADE_MS + 100);
+    const start = window.setTimeout(() => setIncomingShown(true), PAINT_MS);
+    const end = window.setTimeout(() => setOutgoingPhase(null), PAINT_MS + CROSSFADE_MS + 100);
     return () => {
       window.clearTimeout(start);
       window.clearTimeout(end);

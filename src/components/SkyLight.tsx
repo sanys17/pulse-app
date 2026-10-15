@@ -8,8 +8,11 @@ export const PROVISIONAL_SUN = {
 
 /**
  * Daylight: a breathing glow and beams that grow out of the sun and dissolve.
- * Pure CSS (opacity/transform only). Renders nothing, so nothing animates, while inactive.
- * Fills its positioned parent; sunX/sunY are normalized 0-1 positions on the photograph.
+ * Pure CSS (opacity/transform only). Fills its positioned parent; sunX/sunY are normalized
+ * 0-1 positions on the photograph.
+ *
+ * While inactive the layer stays mounted and is paused rather than unmounted, so the glow and
+ * the beams resume mid-cycle instead of every cycle restarting together on an app resume.
  */
 export default function SkyLight({
   phase,
@@ -22,10 +25,10 @@ export default function SkyLight({
   sunY: number;
   active: boolean;
 }) {
-  if (!active) return null;
   return (
     <div
       aria-hidden="true"
+      className={active ? undefined : "sky-paused"}
       style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}
     >
       <div

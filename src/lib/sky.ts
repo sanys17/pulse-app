@@ -468,10 +468,11 @@ function bestMomentOfNight(
  * middle of the dark window, and each rung is one sidereal drift wide. A
  * culmination walking earlier by one drift a night therefore lands on a rung
  * exactly once per spacing and cannot step over one. A body with its own motion
- * walks a little slower or faster than that, which can give two consecutive
- * occasions, or - only for something retrograding faster than the sidereal
- * drift, which among the planets means Mars near opposition - skip a rung and
- * wait for the next.
+ * walks a little slower or faster than that. Direct (eastward) motion adds to
+ * its right ascension and so shortens the nightly step, which can put two
+ * consecutive nights inside one rung. Retrograde motion subtracts from it, so
+ * the body drifts faster than sidereal - fastest of all Mars near opposition -
+ * and a step wider than a rung can land either side of one rather than on it.
  *
  * This asks nothing about any other night, which is the point: there is no
  * cross-night comparison to be made inconsistent by stale positions.

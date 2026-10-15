@@ -344,15 +344,38 @@ input[type="time"]::-webkit-date-and-time-value {
   min-height: 1.2em;
 }
 
-/* Night sky twinkle: three groups on their own cycles, never per-star. Opacity only. */
+/* Nothing in the sky animates while nobody can see it (the battery rule in the sky design
+   doc). The layers stay mounted and get this class instead of being unmounted: a paused
+   animation resumes where it stopped, where a remount restarts every cycle at 0% - which on
+   the cloud track means teleporting it by up to a full group width on the most ordinary
+   action there is, leaving and returning to the app. Pausing is also cheaper than tearing
+   composited layers down and rebuilding them.
+   `!important` is required: every `animation:` shorthand below is a higher-specificity rule
+   that resets animation-play-state to `running`. */
+.sky-paused,
+.sky-paused * {
+  animation-play-state: paused !important;
+}
+
+/* Night sky twinkle: three groups on their own cycles, never per-star. Each group is an HTML
+   box with its own <svg> inside rather than an SVG <g>: WebKit does not layer-back a <g>, so
+   animating one repainted ~120 circles every frame on top of the hero's WebGL context. An
+   HTML box with `will-change: opacity` is composited and the repaint goes away. Opacity only. */
 @keyframes skyTwinkle {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
+}
+.sky-stars-group {
+  position: absolute;
+  inset: 0;
+  will-change: opacity;
 }
 .sky-twinkle-a { animation: skyTwinkle 6.5s ease-in-out infinite; }
 .sky-twinkle-b { animation: skyTwinkle 9s ease-in-out -3s infinite; }
 .sky-twinkle-c { animation: skyTwinkle 12s ease-in-out -7s infinite; }
 @media (prefers-reduced-motion: reduce) {
+  /* The stars stay visible; only the twinkle stops. */
+  .sky-stars-group { will-change: auto; }
   .sky-twinkle-a, .sky-twinkle-b, .sky-twinkle-c { animation: none; }
 }
 
@@ -418,21 +441,27 @@ input[type="time"]::-webkit-date-and-time-value {
   .sky-glow, .sky-morning .sky-beam, .sky-afternoon .sky-beam { animation: none; }
 }
 
-/* Afternoon clouds: minimal drift. The track holds two identical groups; moving it by
-   -50% is exactly one group width, so the wrap lands on an identical picture. 240s per
-   traverse (5px/s). Transform only. */
+/* Afternoon clouds: minimal drift. The track is exactly two identical groups wide
+   (`width: max-content` over two `flex: none` children), so moving it by -50% is exactly one
+   group width and the wrap lands on an identical picture - whatever that width turns out to
+   be. A group is GROUP_W (440px, about panel width) or the viewport if that is wider, so a
+   landscape panel is never wider than the track can cover. 440px at the old 5px/s is 88s.
+   Transform only, and deliberately no `will-change`: a promoted 2 x 440 x 520 track at 3x DPR
+   is megabytes of backing store sitting next to the hero's WebGL context, and iOS composites
+   a transform animation without the hint. */
 .sky-clouds-track {
   position: absolute;
   left: 0;
   top: 0;
   height: 100%;
+  width: max-content;
   display: flex;
-  will-change: transform;
-  animation: skyCloudDrift 240s linear infinite;
+  animation: skyCloudDrift 88s linear infinite;
 }
 .sky-clouds-group {
   position: relative;
   flex: none;
+  min-width: 100vw;
   height: 100%;
 }
 .sky-puff {
@@ -445,5 +474,5 @@ input[type="time"]::-webkit-date-and-time-value {
   to { transform: translate3d(-50%, 0, 0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sky-clouds-track { animation: none; will-change: auto; }
+  .sky-clouds-track { animation: none; }
 }
