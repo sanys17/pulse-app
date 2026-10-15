@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type CSSProperties } from "react";
 import { STARS } from "../data/stars";
-import { projectStars, rareNight, type ProjectedStar, type RareNight } from "../lib/sky";
+import { projectStars, rareNight, type PlanetDot, type ProjectedStar, type RareNight } from "../lib/sky";
 import { rareCandidates } from "../lib/skyBodies";
 import type { Observer } from "../lib/observer";
 import { reportError } from "../lib/monitoring";
@@ -13,6 +13,49 @@ const RECOMPUTE_MS = 5 * 60 * 1000;
 const GALAXY_SRC = "/assets/galaxy.webp";
 const GALAXY_ASPECT = 2912 / 1440;
 const BAND_FADE = "linear-gradient(to right, transparent 0%, #000 17%, #000 83%, transparent 100%)";
+
+// Each planet's own disc, shot on pure black so `screen` drops the background. Keyed by the
+// lowercase name sky.ts carries on the dot; a planet absent from this map simply renders as
+// glow, so adding or removing one is a data change, not a code change. A few KB each, and
+// only the one planet on a planet night is ever fetched.
+// Two knobs, both multipliers on the dot's computed radius (which is driven by the planet's
+// real magnitude, so the brighter planets stay the bigger ones). DISC is a diameter, BLOOM a
+// radius, so the glow keeps surrounding the disc as long as BLOOM*2 stays comfortably above
+// DISC — at 8.5 and 7 the disc is about 60% of the bloom's width.
+const PLANET_DISC = 8.5;
+const PLANET_BLOOM = 7;
+
+const PLANET_IMAGES: Record<string, string | undefined> = {
+  venus: "/assets/planet-venus.webp",
+  mars: "/assets/planet-mars.webp",
+  jupiter: "/assets/planet-jupiter.webp",
+  saturn: "/assets/planet-saturn.webp",
+};
+
+/**
+ * Dev-only: ?rare=all lays the four planets out side by side so they can be compared at the
+ * size they will actually be drawn. Positions are arbitrary; the radii are not — they are the
+ * real magnitude-driven values, so the relative sizes are honest (Venus really is the biggest
+ * and Mars the smallest). Returns null outside dev or without the flag.
+ */
+function planetPreview(width: number, height: number): PlanetDot[] | null {
+  if (!import.meta.env.DEV) return null;
+  if (new URLSearchParams(window.location.search).get("rare") !== "all") return null;
+  const spots: Array<[string, number, string, number, number]> = [
+    ["venus", 3.6, "#F6EBD2", 0.3, 0.3],
+    ["jupiter", 2.63, "#F2E6CF", 0.7, 0.3],
+    ["saturn", 2.5, "#EBDCB4", 0.3, 0.56],
+    ["mars", 2.4, "#E0A080", 0.7, 0.56],
+  ];
+  return spots.map(([name, r, colour, fx, fy]) => ({
+    kind: "planet" as const,
+    name,
+    r,
+    colour,
+    x: width * fx,
+    y: height * fy,
+  }));
+}
 const GROUP_CLASSES = ["sky-twinkle-a", "sky-twinkle-b", "sky-twinkle-c"] as const;
 
 // Every <svg> below is the same size, at the same origin, with the same viewBox, so the three
@@ -108,6 +151,9 @@ export default function NightSky({
   const groups: ProjectedStar[][] = [[], [], []];
   sky.stars.forEach((star, i) => groups[i % 3].push(star));
   const { rare } = sky;
+  // One planet on a real planet night; four side by side under the dev preview flag.
+  const preview = planetPreview(width, height);
+  const planets: PlanetDot[] = preview ?? (rare?.kind === "planet" ? [rare] : []);
 
   // The computed span is the plane's reach, which can be shorter than the panel (209px on a
   // 430x520 panel is typical). A band that ends inside the frame reads as an oval sitting in
@@ -190,18 +236,76 @@ export default function NightSky({
       {/* The rare body never twinkles, so it sits in its own un-animated layer, above the
           stars exactly as it was when it was the last child of a single <svg>. */}
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={LAYER}>
-        {rare?.kind === "planet" && (
-          <g>
-            {/* A planet shows a disc and does not twinkle; a star is a point that does. So it
-                needs a solid, saturated core clearly larger than any star's, inside its own
-                coloured bloom — the stars' halos are white and faint by comparison. */}
-            <circle cx={rare.x} cy={rare.y} r={rare.r * 5} fill={rare.colour} opacity="0.1" />
-            <circle cx={rare.x} cy={rare.y} r={rare.r * 2.4} fill={rare.colour} opacity="0.3" />
-            <circle cx={rare.x} cy={rare.y} r={rare.r * 1.5} fill={rare.colour} />
-            <circle cx={rare.x} cy={rare.y} r={rare.r * 0.7} fill="#ffffff" opacity="0.85" />
+        {planets.map((p) => (
+          <g key={p.name}>
+            {/* The bloom. One circle, one continuous falloff — stacked discs of solid colour
+                gave hard concentric edges, which is how a map pin is drawn, not how a light
+                behaves. With a disc on top the bloom is what keeps the planet belonging to
+                the sky instead of looking pasted onto it, so it stays even when an image
+                is drawn inside it. */}
+            <defs>
+              <radialGradient id={`${starId}-${p.name}`}>
+                {PLANET_IMAGES[p.name] ? (
+                  // The disc is opaque and sits on top, so the bloom may simply run under it:
+                  // one smooth falloff, no plateau and no onset, which is what stops a ring
+                  // forming at the planet's rim. It carries no white core because the planet
+                  // image supplies the brightness.
+                  <>
+                    <stop offset="0%" stopColor={p.colour} stopOpacity="0.7" />
+                    <stop offset="30%" stopColor={p.colour} stopOpacity="0.5" />
+                    <stop offset="48%" stopColor={p.colour} stopOpacity="0.3" />
+                    <stop offset="62%" stopColor={p.colour} stopOpacity="0.16" />
+                    <stop offset="74%" stopColor={p.colour} stopOpacity="0.08" />
+                    <stop offset="86%" stopColor={p.colour} stopOpacity="0.03" />
+                    <stop offset="94%" stopColor={p.colour} stopOpacity="0.01" />
+                    <stop offset="100%" stopColor={p.colour} stopOpacity="0" />
+                  </>
+                ) : (
+                  // No disc for this planet: the glow is the whole thing, so it keeps the
+                  // burnt-out core that makes a bright point read as a light source.
+                  <>
+                    <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+                    <stop offset="18%" stopColor="#ffffff" stopOpacity="1" />
+                    <stop offset="26%" stopColor={p.colour} stopOpacity="0.85" />
+                    <stop offset="42%" stopColor={p.colour} stopOpacity="0.4" />
+                    <stop offset="62%" stopColor={p.colour} stopOpacity="0.15" />
+                    <stop offset="100%" stopColor={p.colour} stopOpacity="0" />
+                  </>
+                )}
+              </radialGradient>
+            </defs>
+            <circle cx={p.x} cy={p.y} r={p.r * PLANET_BLOOM} fill={`url(#${starId}-${p.name})`} />
           </g>
-        )}
+        ))}
       </svg>
+      {/* The planet's disc. The images carry real alpha (black keyed out at build time), so
+          this draws normally and OCCLUDES its own bloom. That matters: the earlier version
+          screen-blended them, and screen lets the backdrop through — the bloom's bright core
+          punched a glowing hole through Mars, and cutting a hole in the bloom to avoid it
+          left a visible ring at the rim instead. An opaque disc needs neither hack.
+          A disc has a limb, and that edge is what says "a world" rather than "a point of
+          light". Drawn at half the bloom's diameter so the glow still surrounds it; an
+          unknown or missing name falls through to glow only. */}
+      {planets.map((p) =>
+        PLANET_IMAGES[p.name] ? (
+          <img
+            key={p.name}
+            src={PLANET_IMAGES[p.name]}
+            alt=""
+            aria-hidden="true"
+            onError={() => reportError(new Error(`planet image failed: ${p.name}`), { area: "night-sky", target: "planet" })}
+            style={{
+              position: "absolute",
+              left: p.x - (p.r * PLANET_DISC) / 2,
+              top: p.y - (p.r * PLANET_DISC) / 2,
+              width: p.r * PLANET_DISC,
+              height: p.r * PLANET_DISC,
+              maxWidth: "none",
+              pointerEvents: "none",
+            }}
+          />
+        ) : null,
+      )}
     </div>
   );
 }

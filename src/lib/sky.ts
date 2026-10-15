@@ -216,8 +216,10 @@ export function projectStars(
 /** The Milky Way, as a band: anchor position, on-screen orientation and span. */
 export type GalaxyBand = { kind: "galaxy"; x: number; y: number; angle: number; length: number };
 
-/** One bright planet, as a dot. */
-export type PlanetDot = { kind: "planet"; x: number; y: number; r: number; colour: string };
+/** One bright planet: where it is, how big its glow should be, and which planet it is.
+ *  `name` is carried so the renderer can pick that planet's own image; it is lowercase and
+ *  may be "" if the adapter did not supply one, in which case the renderer draws glow only. */
+export type PlanetDot = { kind: "planet"; x: number; y: number; r: number; colour: string; name: string };
 
 /**
  * The Milky Way band, or a single bright planet, or nothing. Never both: when
@@ -492,7 +494,7 @@ function culminationAltitude(dec: number, latitude: number): number {
 
 type NightVerdict =
   | { kind: "galaxy"; offsetMinutes: number }
-  | { kind: "planet"; offsetMinutes: number; planet: SkyBody & { colour: string } };
+  | { kind: "planet"; offsetMinutes: number; planet: SkyBody & { colour: string; name?: string } };
 
 /**
  * What one night offers, before the ladder is applied. The galaxy wins a night
@@ -606,7 +608,7 @@ function buildBand(
 }
 
 function buildDot(
-  planet: SkyBody & { colour: string },
+  planet: SkyBody & { colour: string; name?: string },
   observer: Observer,
   date: Date,
   width: number,
@@ -621,7 +623,8 @@ function buildDot(
   const r = PLANET_RADIUS_BRIGHTEST + (PLANET_RADIUS_DIMMEST - PLANET_RADIUS_BRIGHTEST) * faintness;
   if (!Number.isFinite(r) || r <= 0) return null;
 
-  return { kind: "planet", x: point.x, y: point.y, r, colour: planet.colour };
+  const name = typeof planet.name === "string" ? planet.name.toLowerCase() : "";
+  return { kind: "planet", x: point.x, y: point.y, r, colour: planet.colour, name };
 }
 
 /**
