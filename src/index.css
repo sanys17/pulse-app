@@ -343,3 +343,15 @@ input[type="time"]::-webkit-date-and-time-value {
   margin: 0;
   min-height: 1.2em;
 }
+
+/* Night sky twinkle: three groups on their own cycles, never per-star. Opacity only. */
+@keyframes skyTwinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.sky-twinkle-a { animation: skyTwinkle 6.5s ease-in-out infinite; }
+.sky-twinkle-b { animation: skyTwinkle 9s ease-in-out -3s infinite; }
+.sky-twinkle-c { animation: skyTwinkle 12s ease-in-out -7s infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .sky-twinkle-a, .sky-twinkle-b, .sky-twinkle-c { animation: none; }
+}
