@@ -185,26 +185,35 @@ export function projectStars(
 //    from a mid-latitude, which turns the rare night into ordinary scenery. So
 //    qualifying is not enough on its own: see (3).
 //
-// 2. ONE ANSWER PER NIGHT. The decision is keyed to the local night, never to
-//    the instant, because a refresh must not be able to spoil it. Everything is
-//    decided from night-level facts: whether the body reaches its highest point
-//    *inside* that night's dark window, how high it gets, and how central that
-//    moment is in the window. The clock is not a rarity knob; the sky is.
+// 2. ONE VERDICT PER NIGHT. Whether tonight is rare, and which body it is, are
+//    keyed to the local night and never to the instant, because a refresh must
+//    not be able to spoil it. Both are decided from night-level facts only:
+//    whether the body reaches its highest point *inside* that night's dark
+//    window, how high it gets, and when in the window that moment falls. Where
+//    the body is drawn does track the instant - see `rareNight`.
 //
-// 3. THE PEAK OF A RUN, NOT A NARROW WINDOW. A body that qualifies at all tends
-//    to qualify for weeks on end, because its transit creeps through the dark
-//    window at about four minutes a night. So the calendar is cut into fixed
-//    blocks of BLOCK_NIGHTS and only the best-scoring qualifying night in a
-//    block is rare. A Jupiter apparition that qualifies on eighty nights
-//    collapses to about four occasions, spread through its season.
+// 3. AN OCCASION LADDER, NOT A RUN AND NOT A NARROW WINDOW. A body that
+//    qualifies at all tends to qualify for weeks, because its culmination
+//    creeps earlier through the dark window by one sidereal drift - about four
+//    minutes - every night. So the night is rare only when that culmination
+//    lands on one rung of a ladder of target times, the rungs spaced a
+//    fortnight's worth of drift apart and anchored on the middle of the dark
+//    window. A body sweeping the window therefore gets an occasion roughly
+//    every fortnight, with one of them exactly on the darkest hour, and an
+//    eighty-night apparition collapses to about five occasions.
 //
-// The block grid is the one arbitrary thing here: it is anchored to the Unix
-// epoch rather than to anything astronomical. It is still fully determined by
-// the date, with no random and no user-dependent term, and it is what converts
-// a long run into a few occasions without narrowing the astronomy.
+// Why a ladder rather than "the best night of each calendar block": the block
+// version had to score every night of the block, and it could only score them
+// from the one set of positions the caller handed in. Positions up to a
+// fortnight stale then decided which night won, so different nights of the same
+// block nominated different winners and a block could go dark with no night
+// ever agreeing it was the one. The ladder asks each night only about itself,
+// using only its own positions, so there is nothing to disagree about. It also
+// drops the arbitrary epoch-anchored block grid: the rungs are anchored to the
+// sky - the darkest hour of the night - not to the Unix epoch.
 // ---------------------------------------------------------------------------
 
-/** The Milky Way, as a band: core position, on-screen orientation and span. */
+/** The Milky Way, as a band: anchor position, on-screen orientation and span. */
 export type GalaxyBand = { kind: "galaxy"; x: number; y: number; angle: number; length: number };
 
 /** One bright planet, as a dot. */
@@ -212,8 +221,8 @@ export type PlanetDot = { kind: "planet"; x: number; y: number; r: number; colou
 
 /**
  * The Milky Way band, or a single bright planet, or nothing. Never both: when
- * both qualify on the chosen night the galaxy wins, because the band is a
- * whole-sky feature that would wash out a single dot.
+ * both qualify on a night the galaxy wins, because the band is a whole-sky
+ * feature that would wash out a single dot.
  *
  * The galaxy is a geometry rather than a flag because the galactic plane's
  * orientation on screen changes with the hour and the observer's latitude:
@@ -225,24 +234,24 @@ export type RareNight = GalaxyBand | PlanetDot | null;
 /**
  * The dark window, in hours after local solar midnight of the night's evening
  * date: 19:00 to 01:00 the next morning. Local solar time is used rather than
- * the device clock so the same instant means the same thing everywhere.
+ * the device clock so the same instant means the same thing everywhere. Writing
+ * the window as hours past midnight rather than as two clock times keeps it
+ * monotone, so there is no midnight wrap to get wrong.
  */
 const NIGHT_FROM_HOUR = 19;
 const NIGHT_UNTIL_HOUR = 25;
-const NIGHT_STEP_MINUTES = 30;
-
-/** Nights per selection block: only the best qualifying night in a block is rare. */
-const BLOCK_NIGHTS = 14;
+const NIGHT_STEP_MINUTES = 5;
 
 /**
- * Two nights whose peak is this close to equally central count as equally good,
- * and the earlier one wins. This is what makes the choice immune to the body's
- * own motion: a planet drifts by a few seconds of transit time over one night,
- * so without a tolerance an exact tie could flip between two openings of the
- * app. Four minutes separate consecutive nights, so a two-minute tolerance
- * never merges nights that are genuinely different.
+ * How much earlier a fixed star culminates each night: one solar day minus one
+ * sidereal day, 3m 55.91s. This is the natural step of the problem - the
+ * spacing of the rungs is measured in it, and it is the width of the rung, so
+ * a culmination drifting through the window cannot step over one.
  */
-const SCORE_EPSILON_MINUTES = 2;
+const SIDEREAL_DRIFT_MINUTES = 3.93182;
+
+/** Rung spacing, in nights of drift: one occasion per fortnight of a season. */
+const OCCASION_SPACING_NIGHTS = 14;
 
 /** The Milky Way must pass high overhead, not skirt the horizon. */
 const GALAXY_MIN_ALTITUDE = 72;
@@ -297,6 +306,8 @@ function equatorialFromUnit(v: Vec3): { ra: number; dec: number } {
 
 const NGP = unitFromEquatorial(NGP_RA_HOURS, NGP_DEC_DEGREES);
 
+type PlaneBasis = { towardCore: Vec3; towardRising: Vec3 };
+
 /**
  * The galactic plane as two perpendicular directions in the equatorial frame:
  * `towardCore` is galactic longitude 0 and `towardRising` is galactic longitude
@@ -308,7 +319,7 @@ const NGP = unitFromEquatorial(NGP_RA_HOURS, NGP_DEC_DEGREES);
  * the direction of increasing galactic longitude - from Sagittarius towards
  * Cygnus, not away from it.
  */
-function planeBasis(core: SkyBody): { towardCore: Vec3; towardRising: Vec3 } | null {
+function planeBasis(core: SkyBody): PlaneBasis | null {
   const towardCore = unitFromEquatorial(core.ra, core.dec);
 
   // The core has to lie on the galactic plane, or it does not define it: any
@@ -333,7 +344,7 @@ function planeBasis(core: SkyBody): { towardCore: Vec3; towardRising: Vec3 } | n
 }
 
 /** The point on the galactic plane at galactic longitude `l` degrees. */
-function planePoint(basis: { towardCore: Vec3; towardRising: Vec3 }, l: number): SkyBody {
+function planePoint(basis: PlaneBasis, l: number): SkyBody {
   const c = Math.cos(l * DEG);
   const s = Math.sin(l * DEG);
   const v: Vec3 = [
@@ -358,7 +369,7 @@ function planePoint(basis: { towardCore: Vec3; towardRising: Vec3 }, l: number):
  * Returns `null` if anything is non-finite.
  */
 function brightestPlanePoint(
-  basis: { towardCore: Vec3; towardRising: Vec3 },
+  basis: PlaneBasis,
   observer: Observer,
   date: Date,
 ): { altitude: number; longitude: number } | null {
@@ -403,20 +414,20 @@ function nightInstantMs(night: number, observer: Observer, hour: number): number
 const NIGHT_SAMPLES = Math.round(((NIGHT_UNTIL_HOUR - NIGHT_FROM_HOUR) * 60) / NIGHT_STEP_MINUTES) + 1;
 
 /**
- * The best moment of one night for whatever `altitudeAt` measures.
+ * The best moment of one night for whatever `altitudeAt` measures, as how many
+ * minutes it falls after the middle of the dark window (negative before).
  *
- * Returns `null` unless the maximum falls strictly inside the dark window: a
- * body still climbing at 01:00, or already past its best at 19:00, did not have
- * its night. `instant` is the grid sample itself, so it is identical for every
- * call about this night; `offsetMinutes` is refined by fitting a parabola to the
- * three samples around the peak, which is what makes consecutive nights
- * distinguishable (they differ by about four minutes).
+ * Returns `null` unless the maximum falls strictly inside the window: a body
+ * still climbing at 01:00, or already past its best at 19:00, did not have its
+ * night. The offset is refined by fitting a parabola to the three samples around
+ * the peak, which is what makes consecutive nights distinguishable - they are
+ * only one sidereal drift apart.
  */
 function bestMomentOfNight(
   night: number,
   observer: Observer,
   altitudeAt: (date: Date) => number,
-): { instant: Date; altitude: number; offsetMinutes: number } | null {
+): { altitude: number; offsetMinutes: number } | null {
   const values: number[] = [];
   let bestIndex = -1;
   let bestValue = -Infinity;
@@ -442,13 +453,35 @@ function bestMomentOfNight(
   if (!Number.isFinite(shift)) return null;
 
   const hour = NIGHT_FROM_HOUR + (bestIndex * NIGHT_STEP_MINUTES) / 60;
-  const instantMs = nightInstantMs(night, observer, hour);
   const centreMs = nightInstantMs(night, observer, (NIGHT_FROM_HOUR + NIGHT_UNTIL_HOUR) / 2);
-  const peakMs = instantMs + shift * NIGHT_STEP_MINUTES * MS_PER_MINUTE;
-  const offsetMinutes = Math.abs(peakMs - centreMs) / MS_PER_MINUTE;
+  const peakMs = nightInstantMs(night, observer, hour) + shift * NIGHT_STEP_MINUTES * MS_PER_MINUTE;
+  const offsetMinutes = (peakMs - centreMs) / MS_PER_MINUTE;
   if (!Number.isFinite(offsetMinutes)) return null;
 
-  return { instant: new Date(instantMs), altitude: bestValue, offsetMinutes };
+  return { altitude: bestValue, offsetMinutes };
+}
+
+/**
+ * Is this night's culmination on a rung of the occasion ladder?
+ *
+ * The rungs sit `OCCASION_SPACING_NIGHTS` sidereal drifts apart, centred on the
+ * middle of the dark window, and each rung is one sidereal drift wide. A
+ * culmination walking earlier by one drift a night therefore lands on a rung
+ * exactly once per spacing and cannot step over one. A body with its own motion
+ * walks a little slower or faster than that, which can give two consecutive
+ * occasions, or - only for something retrograding faster than the sidereal
+ * drift, which among the planets means Mars near opposition - skip a rung and
+ * wait for the next.
+ *
+ * This asks nothing about any other night, which is the point: there is no
+ * cross-night comparison to be made inconsistent by stale positions.
+ */
+function isOnLadder(offsetMinutes: number): boolean {
+  if (!Number.isFinite(offsetMinutes)) return false;
+  const spacing = OCCASION_SPACING_NIGHTS * SIDEREAL_DRIFT_MINUTES;
+  const centred = offsetMinutes + SIDEREAL_DRIFT_MINUTES / 2;
+  const phase = ((centred % spacing) + spacing) % spacing;
+  return phase < SIDEREAL_DRIFT_MINUTES;
 }
 
 /** The highest altitude a body at this declination can ever reach from this latitude. */
@@ -457,17 +490,17 @@ function culminationAltitude(dec: number, latitude: number): number {
 }
 
 type NightVerdict =
-  | { kind: "galaxy"; instant: Date; offsetMinutes: number; longitude: number }
-  | { kind: "planet"; instant: Date; offsetMinutes: number; planet: SkyBody & { colour: string } };
+  | { kind: "galaxy"; offsetMinutes: number }
+  | { kind: "planet"; offsetMinutes: number; planet: SkyBody & { colour: string } };
 
 /**
- * What one night offers, before rarity is applied. The galaxy wins a night it
- * shares with a planet; among planets the brightest wins, with the name as a
+ * What one night offers, before the ladder is applied. The galaxy wins a night
+ * it shares with a planet; among planets the brightest wins, with the name as a
  * tie-break so the answer cannot depend on array order.
  */
 function nightVerdict(
   candidates: RareCandidates,
-  basis: { towardCore: Vec3; towardRising: Vec3 } | null,
+  basis: PlaneBasis | null,
   observer: Observer,
   night: number,
 ): NightVerdict | null {
@@ -477,15 +510,7 @@ function nightVerdict(
       return found ? found.altitude : NaN;
     });
     if (best && best.altitude >= GALAXY_MIN_ALTITUDE) {
-      const anchor = brightestPlanePoint(basis, observer, best.instant);
-      if (anchor) {
-        return {
-          kind: "galaxy",
-          instant: best.instant,
-          offsetMinutes: best.offsetMinutes,
-          longitude: anchor.longitude,
-        };
-      }
+      return { kind: "galaxy", offsetMinutes: best.offsetMinutes };
     }
   }
 
@@ -508,7 +533,7 @@ function nightVerdict(
     const name = typeof planet.name === "string" ? planet.name : "";
     if (chosen && !(planet.mag < chosenMag || (planet.mag === chosenMag && name < chosenName))) continue;
 
-    chosen = { kind: "planet", instant: best.instant, offsetMinutes: best.offsetMinutes, planet };
+    chosen = { kind: "planet", offsetMinutes: best.offsetMinutes, planet };
     chosenMag = planet.mag;
     chosenName = name;
   }
@@ -531,13 +556,16 @@ function nightVerdict(
  * shortens the band near the horizon.
  */
 function buildBand(
-  basis: { towardCore: Vec3; towardRising: Vec3 },
-  anchorLongitude: number,
+  basis: PlaneBasis,
   observer: Observer,
   date: Date,
   width: number,
   height: number,
 ): GalaxyBand | null {
+  const found = brightestPlanePoint(basis, observer, date);
+  if (!found) return null;
+  const anchorLongitude = found.longitude;
+
   const place = (l: number): { x: number; y: number } | null => {
     const point = planePoint(basis, l);
     if (!Number.isFinite(point.ra) || !Number.isFinite(point.dec)) return null;
@@ -600,18 +628,17 @@ function buildDot(
  *
  * Returns the Milky Way band, or one bright planet, or `null`. **Never both.**
  *
- * The answer is a property of the local night, not of the moment: every instant
- * between 19:00 and 01:00 local solar time on the same night gets the same
- * verdict, and the geometry is built at that night's peak moment rather than at
- * the caller's instant, so a refresh cannot change or spoil it. Two consequences
- * the renderer should know about:
+ * The verdict - whether tonight is rare and which body it is - is a property of
+ * the local night, not of the moment. Every instant of the same night gets the
+ * same answer, so a refresh cannot change or spoil it, and the night runs noon
+ * to noon so it does not flip at midnight either.
  *
- *  - The body is drawn where it is at its best for the night, which is not
- *    necessarily where it is at the moment of the call. For a decorative sky
- *    that is the intent; it is not a planetarium.
- *  - `candidates` must be sampled once per night, not per render. The verdict
- *    tolerates a planet's own motion across a night (see SCORE_EPSILON_MINUTES),
- *    but a planet's drawn position follows the positions it is handed.
+ * The geometry, on the other hand, is built at the caller's `date`: the band's
+ * orientation and the planet's position are where they are *now*, so they move
+ * with the star field drawn around them instead of sitting frozen at some other
+ * hour's position. One consequence: a body that is below the horizon or off the
+ * panel at this instant cannot be drawn, so a rare night returns `null` until it
+ * rises. The verdict has not changed; there is simply nothing there yet.
  *
  * `horizontal()` returns NaN for malformed input by design, so every path here
  * checks finiteness before anything reaches the returned geometry: a NaN in an
@@ -641,27 +668,12 @@ export function rareNight(
   const tonight = nightOf(date, observer);
   if (!Number.isFinite(tonight)) return null;
 
-  // Only the best qualifying night of the block is rare. Nights are compared on
-  // how central their peak is in the dark window; within SCORE_EPSILON_MINUTES
-  // they count as equal and the earlier one keeps the slot, which is what makes
-  // the comparison immune to the bodies' own motion during a night.
-  const blockStart = Math.floor(tonight / BLOCK_NIGHTS) * BLOCK_NIGHTS;
-  let winner: NightVerdict | null = null;
-  let winnerNight = -Infinity;
+  const verdict = nightVerdict(candidates, basis, observer, tonight);
+  if (!verdict) return null;
+  if (!isOnLadder(verdict.offsetMinutes)) return null;
 
-  for (let night = blockStart; night < blockStart + BLOCK_NIGHTS; night++) {
-    const verdict = nightVerdict(candidates, basis, observer, night);
-    if (!verdict) continue;
-    if (!winner || verdict.offsetMinutes < winner.offsetMinutes - SCORE_EPSILON_MINUTES) {
-      winner = verdict;
-      winnerNight = night;
-    }
+  if (verdict.kind === "galaxy") {
+    return basis ? buildBand(basis, observer, date, width, height) : null;
   }
-
-  if (!winner || winnerNight !== tonight) return null;
-
-  if (winner.kind === "galaxy") {
-    return basis ? buildBand(basis, winner.longitude, observer, winner.instant, width, height) : null;
-  }
-  return buildDot(winner.planet, observer, winner.instant, width, height);
+  return buildDot(verdict.planet, observer, date, width, height);
 }
