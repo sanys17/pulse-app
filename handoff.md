@@ -1,11 +1,13 @@
 # Pulse: Handoff (current state)
 
-Last updated: 2026-10-15. Update this file at the end of any session that changes project state; it is imported into `CLAUDE.md`, so every session reads it first.
+Last updated: 2026-10-16. Update this file at the end of any session that changes project state; it is imported into `CLAUDE.md`, so every session reads it first.
 
 ## Status
-Mostly on `master`, deployed on Vercel, `npm run build` passes. No test runner exists; nothing is verified except by build and manual device testing.
+Deployed on Vercel from `master`. `npm run build`, `npx tsc -b` and `npm test` (94 tests) all pass.
 
-**Current branch `home-redesign-v2` has zero commits — a full session of home-screen work exists only as uncommitted working-tree changes.** See "Home redesign (in progress)" below before doing anything destructive.
+**Active branch is `feat/sky-backgrounds`, 24 commits, branched off `home-redesign-v2`** (which is itself 3 commits ahead of `master` and carries the Oura-style progress arc). Nothing is merged. The sky feature is functionally complete but **has never been run on a real device** — see "Animated sky backgrounds" below.
+
+Corrections to earlier versions of this file, found 2026-10-15: the `home-redesign-v2` work *is* committed (it was described here as uncommitted), and PRs #8 and #15 are **merged**, not open. All PRs #1-#15 are closed or merged; there are no open PRs.
 
 | Area | State |
 |---|---|
@@ -20,23 +22,57 @@ Mostly on `master`, deployed on Vercel, `npm run build` passes. No test runner e
 | Open plans (any friend can join, max 20), Leave plan, @username under names, stale-fetch fix for deleted plans | On PR #15 (`style/nav-higher`). **Needs `012_open_plans.sql` run in the SQL Editor right before deploying.** It also tightens plan_members insert (the old policy let anyone add themselves to any plan). RLS, cap and join notification checked in a local PGlite replay only; not tested on a device |
 | **Push notifications** | **Live** (PR #13). Server sender via Supabase pg_cron every minute (heartbeat in Better Stack), custom service worker, Settings section. Verified: scheduler returns 200 and a test notification reaches the iPhone Home Screen app. Branch `feat/per-item-reminders` replaces global alert/time settings with per-event, per-plan and per-habit reminders (needs migration 011, run right before deploying it). Not yet confirmed one by one: habit, event, plan, invitation, friend request and morning notifications on a real device. Runbook: `docs/notifications-runbook.md` |
 
-## Home redesign (in progress, `home-redesign-v2`, uncommitted)
-Nothing here is committed and the branch is level with `master`. `npx tsc -b` and `npm run build` pass. Not tested on a device.
+## Animated sky backgrounds (`feat/sky-backgrounds`, 24 commits, not merged)
 
-**Hero progress arc** (`src/pages/Home.tsx`). Oura-style shallow gauge: the top slice of a large circle, geometry in module constants near the top of the file (`ARC_R` 198, `ARC_CX` 170, `ARC_HALF_CHORD` 155, `ARC_W` 11, `ARC_BOX_W/H`). Everything derives from those — the track path, the clip ribbon, the viewBox and the overlay sizes — so changing `ARC_W` alone is safe. Three layers stacked at a strict 1:1 scale: a track `<svg>`, the shader overlay, and a glow `<svg>`. They must all stay fixed-width, because the shader is clipped with `clipPathUnits="userSpaceOnUse"`, whose units are raw CSS pixels; `width: "100%"` on any of them desyncs the clip on screens narrower than 340px.
+Replaces the Home hero's mountain photograph with three time-of-day skies. Spec:
+`docs/superpowers/specs/2026-10-15-animated-sky-backgrounds-design.md`. Plan:
+`docs/superpowers/plans/2026-10-15-animated-sky-backgrounds.md`. Built task-by-task with a
+fresh reviewer per task plus a whole-branch review; every Critical and Important finding was
+fixed, deferred minors are listed in the plan's workspace under `.superpowers/sdd/` (gitignored).
 
-- **Water fill** is `NeuroNoise` from `@paper-design/shaders-react`, clipped to the filled part of the arc by `buildArcClip()`. Earlier attempts that all failed and should not be retried: SVG animated patterns, CSS dashes, rAF-driven SVG gradients, `feTurbulence` + `feDisplacementMap` (pixelated), a hand-written WebGL shader in `<foreignObject>` (WebKit will not render a WebGL context there).
-- **Fill animation** springs from empty via `animateSpring` (`src/lib/spring.ts`, `response: 0.55`, `damping: 1`), writing `d` and the glow position straight to the DOM through refs so a fill does not re-render the page. Interruptible, and snaps to final under `prefers-reduced-motion`.
-- **Leading-edge glow** is a halo + core circle repositioned to the arc tip each frame by `arcTip()`.
+**What exists**
+- **Morning** and **afternoon** are real sky-only photographs (`morning_sky.webp`,
+  `afternoon_sky.webp`, 1290x1922, ~50 KB each). Each has a breathing sun glow and beams that
+  grow out of the sun and dissolve — morning sparse (23s/31s cycles), afternoon busier
+  (13s/17s/21s). Afternoon also has minimal CSS cloud drift, 5px/s on a 4-minute loop.
+- **Night has no photograph.** Its useful range is sRGB 9-49, so a photo of it is near-black
+  with grain. It is a CSS gradient (`NIGHT_SKY` in `Home.tsx`) sampled from a real night photo
+  in panel space, then scaled to 60%.
+- **Stars are real.** 904 naked-eye stars from the Yale Bright Star Catalogue (CDS V/50),
+  committed as `src/data/stars.ts`, projected for the observer's actual location — derived
+  from the browser timezone, no geolocation permission. Twinkle is three composited layers,
+  never per-star.
+- **Rare nights**: 12-14 a year at every latitude tested, either the Milky Way (a photograph,
+  `galaxy.webp`, screen-blended, fetched only on a galaxy night) or one planet (Venus, Mars,
+  Jupiter, Saturn — each an alpha-keyed disc inside its own coloured bloom). Never both.
+  Driven by a sidereal-drift ladder in `sky.ts`: no cross-night comparison, stable for a whole
+  night, so a refresh cannot spoil it.
 
-**Known not-done on this branch**
-- `src/App.tsx` has an auth bypass — `if (!user && import.meta.env.PROD)` — so dev skips sign-in. **Revert before merging.**
-- `package.json` still lists `react-circular-progressbar`; it is no longer imported anywhere. Remove it.
-- `bgImage` is hardcoded to `/assets/mount.webp` with a `TODO`; time-of-day switching is disabled.
-- The Daily/Social toggle in the hero does nothing yet.
-- Background photos in `public/assets` (morning/afternoon/night/mount/mount_day/mount_night, `.jpg` + `.webp`) are untracked and uncommitted.
+**Dev-only URL flags** (all `import.meta.env.DEV`-guarded, stripped from production)
+- `?sky=morning|afternoon|night` — force a phase without waiting out the clock.
+- `?rare=galaxy|planet|any` — scans forward for the next night that *genuinely* qualifies and
+  renders that whole sky. `?rare=all` lays all four planets out side by side.
+- `?hero=v2` — preview of an arc-led hero (percentage inside the arc, 0/100 scale, Next Up
+  directly beneath, no streak). An experiment, not a decision.
 
-**Background direction (decided 2026-10-15, not built).** Brainstormed with the user against mockups. The problem is not the photo's mood — it is that the arc and streak number straddle two surfaces (open sky and textured rock), so neither looks like it belongs to one thing. Agreed direction: **sky only, no horizon** — a real photograph (the user explicitly wants photographic depth and grain, not a flat gradient), one distinct sky per time of day, crossfading on clock boundaries, stars at night. The mountain goes. Consequence: the heavy radial scrim behind the hero text exists only because the photo was busy, so on an even sky it can be lightened or dropped. Open: the existing photos cannot be cropped to pure sky, so new sky assets are needed; sourcing was not settled. Brainstorm mockups are in `.superpowers/brainstorm/` (gitignored).
+**Assets**: only `.webp` files are committed. The multi-megabyte `.jpg` sources
+(`morning_final`, `afternoon_final`, `galaxy`, `venus`/`mars`/`jupiter`/`saturn`) are
+deliberately untracked. Consider adding `public/assets/*.jpg` to `.gitignore`.
+
+**Outstanding on this branch**
+1. **No device verification at all.** Nothing here has been rendered by a browser on an
+   iPhone. Every tuned value — scrim 0.25, night gradient at 60%, galaxy opacity 0.4, planet
+   sizes, arc stroke 8 — was judged on a desktop monitor. This is the plan's stated blocker.
+2. **"Best: N days" fails contrast over the afternoon sky**: 4.0:1 against 4.5:1 needed. It is
+   `rgba(255,255,255,0.75)`, and translucent text composites with the sky behind it. Making it
+   solid `#EAECF4` fixes it. Recorded in `Home.tsx` above `SKY_IMAGES`.
+3. **The hero layout is undecided** — `?hero=v2` versus the current one.
+4. The arc fill was recoloured to the `#1C1C2A` family, which spans luminance ~18-42. If the
+   water motion is invisible at that darkness, the NeuroNoise shader has stopped earning its
+   WebGL context and a flat stroke would do.
+5. `src/App.tsx` still has the dev auth bypass (`if (!user && import.meta.env.PROD)`), and
+   `package.json` still lists the unused `react-circular-progressbar`. Both inherited from
+   `home-redesign-v2`, both out of scope for this branch, both must go before merging.
 
 ## Supabase (user runs SQL manually in the SQL Editor)
 Applied (evidenced by plans working in the app): `001_initial_schema.sql`, `003_social.sql`, `004_fix_plan_policies.sql`., `005_friend_profile_visibility.sql` (run by the user, 2026-10-09). `006_friendships_realtime.sql` and `007_social_realtime.sql` (run by the user, 2026-10-09; verified working with two accounts), `008_feed_reactions.sql` (run by the user). Not confirmed from the repo: whether Google OAuth is configured in Supabase and whether `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set in Vercel (the app throws on startup without them). Ask the user if sign-in or a deploy misbehaves.
@@ -61,14 +97,22 @@ Better Stack error tracking (US region; EU needs a paid plan), app `Pulse-web`. 
 6. Migration (`src/lib/migrate.ts`): completions insert is not deduplicated (a duplicate fails the whole batch); habit ID mapping relies on insert-return order.
 7. `toggleCompletion` and `toggleTask` assign a variable inside a `setState` updater; works today but fragile. Prefer a ref.
 8. Settings shows Google Calendar and Ultrahuman as "Coming Soon" (cloud session change).
+9. **`tests/` is in no tsconfig `include`**, so `npx tsc -b` does not type-check test files. Pre-existing, project-wide.
+10. `skyPhase` and `SKY_BOUNDARY_HOURS` both encode 5/11/18; `skyPhase` now derives from the shared table, but nothing asserts they agree.
 
 ## Next steps (suggested order)
-1. Commit the `home-redesign-v2` work — it is currently one power cut away from gone.
-2. Finish the home redesign: source sky assets, build the time-of-day sky, then revert the auth bypass and drop `react-circular-progressbar`.
-3. Live updates for own-data tables (habits, completions, tasks, calendar events) with an echo guard.
-4. Design cleanup: tokens for accent/status colors, one glass recipe, contrast fixes.
-5. Finish verifying push notifications on a real iPhone: habit, event (two alerts), plan, invitation, friend request, morning summary (runbook section 7).
-6. Add error surfacing to hooks (issue 3).
+1. **Verify the sky on a real iPhone**, all three phases plus Reduce Motion plus a rare night
+   (use the dev flags). This is the only thing standing between the branch and a PR, and no
+   amount of further desktop tuning substitutes for it.
+2. Decide the hero layout (`?hero=v2` or current), then fix the "Best" line's contrast.
+3. Revert the auth bypass in `src/App.tsx`, drop `react-circular-progressbar`, delete the
+   superseded mountain photographs, then open the PR.
+4. Live updates for own-data tables (habits, completions, tasks, calendar events) with an echo
+   guard.
+5. Design cleanup: tokens for accent/status colors, one glass recipe, contrast fixes.
+6. Finish verifying push notifications on a real iPhone: habit, event (two alerts), plan,
+   invitation, friend request, morning summary (runbook section 7).
+7. Add error surfacing to hooks (issue 3).
 
 ## Working with this repo
 - Tooling and rules live in `CLAUDE.md`; UI rules in `docs/design-system.md`. Git: branch, PR into `master`, do not push or merge without being asked.
