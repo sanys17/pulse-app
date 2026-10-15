@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { horizontal, project, projectStars, rareNight } from "../src/lib/sky.ts";
-import type { RareCandidates } from "../src/lib/sky.ts";
+import type { RareCandidates, RareNight } from "../src/lib/sky.ts";
+import type { Observer } from "../src/lib/observer.ts";
 
 // ---------------------------------------------------------------------------
 // FIXTURE PROVENANCE
@@ -332,21 +333,36 @@ test("projectStars preserves input order for the stars it keeps", () => {
 // ===========================================================================
 // THE RARE NIGHT
 //
-// FIXTURE PROVENANCE (E): the planet positions in YEAR_FIXTURE_PLANETS below
-// were GENERATED, not invented. On 2026-10-15 a throwaway script called
-// `rareCandidates(date, PRAGUE)` from src/lib/skyBodies.ts (the impure
-// astronomy-engine adapter) for each of the 365 nights
-// `Date.UTC(2026, 0, 1 + day, 21, 0)` and printed the resulting
-// [ra (hours), dec (degrees), mag] triples, in the adapter's own planet order
-// (Venus, Mars, Jupiter, Saturn). The script was then deleted. The numbers are
-// inlined here as plain data so this test file stays a pure module: importing
-// skyBodies.ts (and through it astronomy-engine) from a test breaks
-// `npm test`, which runs node's type-stripping loader over tests/*.test.mts.
+// FIXTURE PROVENANCE (E): every planet position below was GENERATED, not
+// invented. On 2026-10-15 a throwaway script called `rareCandidates(date,
+// PRAGUE)` from src/lib/skyBodies.ts - the impure astronomy-engine adapter -
+// and printed the resulting [ra (hours), dec (degrees), mag] triples in the
+// adapter's own planet order (Venus, Mars, Jupiter, Saturn). The script was
+// then deleted. The numbers are inlined here as plain data so this test file
+// stays a pure module: importing skyBodies.ts, and through it
+// astronomy-engine, breaks `npm test`, which runs node's type-stripping
+// loader over tests/*.test.mts.
+//
+// Two fixtures are generated that way:
+//
+//   YEAR_FIXTURE_PLANETS   one snapshot per night for 365 nights, taken at
+//                          Date.UTC(2026, 0, 1 + day, 21, 0), used for the
+//                          per-night count across a simulated year.
+//
+//   HOURLY_FIXTURE         nine snapshots spread across each of three whole
+//                          nights, taken at local solar hours 13, 15, 17, 19,
+//                          21, 23, 25, 27 and 33 (i.e. from the afternoon
+//                          before to the morning after). These exist to test
+//                          night-stability honestly: the positions genuinely
+//                          differ from one instant to the next, exactly as
+//                          they would if the app recomputed them on every
+//                          open, so a verdict that depended on the clock
+//                          could not survive them.
 //
 // Consequence worth stating: this is a 2026-specific fixture. It pins the
-// behaviour of a real sky, not a synthetic one, but the simulated-year count
-// below is the count for 2026 seen at 21:00 UTC from Prague. A different year
-// would give a different number inside the same band.
+// behaviour of a real sky, not a synthetic one, but the counts below are the
+// counts for 2026 from Prague. A different year gives different numbers
+// inside the same band.
 // ===========================================================================
 
 const PLANET_NAMES = ["Venus", "Mars", "Jupiter", "Saturn"] as const;
@@ -355,10 +371,39 @@ const PLANET_COLOURS = ["#F4E3B1", "#E0805A", "#F2E6CF", "#E6D3A3"] as const;
 /** Galactic centre (Sgr A*), J2000. Fixed point; `mag` is the adapter's placeholder. */
 const GALACTIC_CENTRE = { ra: 17.761, dec: -28.94, mag: 2 };
 
+/** Milliseconds between UTC and Prague's local solar time. */
+const PRAGUE_OFFSET_MS = (14.44 / 15) * 3600000;
+
+/** The instant at local solar `hour` on the night that begins on `dayUTC`. */
+function pragueInstant(dayUTC: number, hour: number): Date {
+  return new Date(dayUTC + hour * 3600000 - PRAGUE_OFFSET_MS);
+}
+
+/** Local solar hours spanning one whole night, dusk to dawn. */
+const DARK_HOURS = [19, 20, 21, 22, 23, 24, 25] as const;
+
+type Triple = readonly [number, number, number];
+
+function candidatesFrom(row: readonly Triple[]): RareCandidates {
+  return {
+    galacticCentre: { ...GALACTIC_CENTRE },
+    planets: row.map(([ra, dec, mag], i) => ({
+      ra, dec, mag, name: PLANET_NAMES[i], colour: PLANET_COLOURS[i],
+    })),
+  };
+}
+
+/**
+ * A point that is nowhere near the galactic plane, used to switch the galaxy
+ * half off in tests about the planet half. `rareNight` rejects it because a
+ * core off the plane cannot define the plane.
+ */
+const OFF_PLANE_CORE = { ra: 0, dec: 89, mag: 2 };
+
 const YEAR_FIXTURE_START = Date.UTC(2026, 0, 1, 21, 0);
 
 /** [ra, dec, mag] per planet, one row per night. See fixture provenance (E). */
-const YEAR_FIXTURE_PLANETS: readonly (readonly [number, number, number])[][] = [
+const YEAR_FIXTURE_PLANETS: readonly (readonly Triple[])[] = [
   [[18.7240,-23.600,-3.98],[18.9475,-23.694,1.19],[7.5075,22.053,-2.67],[23.8060,-3.719,1.04]],
   [[18.8155,-23.537,-3.98],[19.0031,-23.623,1.18],[7.4982,22.075,-2.67],[23.8096,-3.692,1.04]],
   [[18.9068,-23.461,-3.98],[19.0587,-23.548,1.18],[7.4888,22.098,-2.67],[23.8133,-3.665,1.04]],
@@ -730,13 +775,57 @@ function YEAR_FIXTURE_CANDIDATES(date: Date): RareCandidates {
   const day = Math.round((date.getTime() - YEAR_FIXTURE_START) / 86400000);
   const row = YEAR_FIXTURE_PLANETS[day];
   assert.ok(row, `no fixture row for ${date.toISOString()} (day ${day})`);
-  return {
-    galacticCentre: { ...GALACTIC_CENTRE },
-    planets: row.map(([ra, dec, mag], i) => ({
-      ra, dec, mag, name: PLANET_NAMES[i], colour: PLANET_COLOURS[i],
-    })),
-  };
+  return candidatesFrom(row);
 }
+
+/** The three whole nights the hourly fixture covers. */
+const HOURLY_NIGHTS = [
+  { label: "2026-02-12, a planet night", dayUTC: Date.UTC(2026, 1, 12), expected: "planet" },
+  { label: "2026-09-09, a galaxy night", dayUTC: Date.UTC(2026, 8, 9), expected: "galaxy" },
+  { label: "2026-03-01, an ordinary night", dayUTC: Date.UTC(2026, 2, 1), expected: null },
+] as const;
+
+/**
+ * Per night, nine `[localSolarHour, Venus, Mars, Jupiter, Saturn]` snapshots.
+ * See fixture provenance (E): the positions really do differ hour to hour.
+ */
+const HOURLY_FIXTURE: readonly (readonly (readonly [number, Triple, Triple, Triple, Triple])[])[] = [
+  [
+    [13, [22.3165,-12.046,-3.89],[21.2119,-17.248,1.16],[7.1499,22.814,-2.55],[0.0244,-2.186,0.98]],
+    [15, [22.3231,-12.009,-3.89],[21.2162,-17.229,1.16],[7.1494,22.815,-2.55],[0.0250,-2.183,0.98]],
+    [17, [22.3297,-11.971,-3.89],[21.2206,-17.210,1.16],[7.1489,22.816,-2.55],[0.0255,-2.179,0.98]],
+    [19, [22.3364,-11.934,-3.89],[21.2250,-17.190,1.16],[7.1484,22.817,-2.55],[0.0261,-2.175,0.98]],
+    [21, [22.3430,-11.896,-3.89],[21.2293,-17.171,1.16],[7.1479,22.818,-2.55],[0.0266,-2.172,0.98]],
+    [23, [22.3497,-11.858,-3.89],[21.2337,-17.151,1.16],[7.1474,22.819,-2.55],[0.0272,-2.168,0.98]],
+    [25, [22.3563,-11.821,-3.89],[21.2381,-17.132,1.16],[7.1469,22.820,-2.55],[0.0277,-2.164,0.98]],
+    [27, [22.3630,-11.783,-3.89],[21.2425,-17.113,1.16],[7.1464,22.821,-2.55],[0.0283,-2.160,0.98]],
+    [33, [22.3829,-11.671,-3.89],[21.2556,-17.055,1.16],[7.1450,22.823,-2.55],[0.0300,-2.149,0.98]],
+  ],
+  [
+    [13, [13.6916,-15.340,-4.71],[7.3320,22.835,1.23],[9.1809,16.831,-1.81],[0.8534,2.583,0.30]],
+    [15, [13.6948,-15.370,-4.71],[7.3357,22.829,1.23],[9.1820,16.826,-1.81],[0.8531,2.580,0.30]],
+    [17, [13.6980,-15.400,-4.71],[7.3394,22.823,1.23],[9.1832,16.821,-1.81],[0.8528,2.578,0.30]],
+    [19, [13.7012,-15.430,-4.71],[7.3432,22.817,1.23],[9.1843,16.817,-1.81],[0.8524,2.576,0.30]],
+    [21, [13.7045,-15.459,-4.71],[7.3469,22.811,1.23],[9.1854,16.812,-1.81],[0.8521,2.573,0.30]],
+    [23, [13.7078,-15.489,-4.71],[7.3507,22.805,1.23],[9.1866,16.807,-1.81],[0.8518,2.571,0.30]],
+    [25, [13.7112,-15.519,-4.72],[7.3544,22.800,1.23],[9.1877,16.802,-1.81],[0.8514,2.569,0.30]],
+    [27, [13.7146,-15.549,-4.72],[7.3581,22.794,1.23],[9.1889,16.797,-1.81],[0.8511,2.566,0.30]],
+    [33, [13.7246,-15.639,-4.72],[7.3692,22.777,1.22],[9.1922,16.783,-1.81],[0.8501,2.559,0.29]],
+  ],
+  [
+    [13, [23.6362,-3.833,-3.87],[22.0869,-12.927,1.17],[7.0789,22.949,-2.44],[0.1430,-1.393,0.91]],
+    [15, [23.6425,-3.791,-3.87],[22.0911,-12.904,1.17],[7.0787,22.949,-2.44],[0.1436,-1.389,0.91]],
+    [17, [23.6488,-3.749,-3.87],[22.0953,-12.881,1.17],[7.0785,22.950,-2.44],[0.1442,-1.385,0.91]],
+    [19, [23.6551,-3.706,-3.87],[22.0995,-12.858,1.17],[7.0783,22.950,-2.44],[0.1448,-1.381,0.91]],
+    [21, [23.6615,-3.664,-3.87],[22.1037,-12.835,1.17],[7.0781,22.950,-2.44],[0.1454,-1.377,0.91]],
+    [23, [23.6678,-3.622,-3.87],[22.1080,-12.812,1.17],[7.0779,22.951,-2.44],[0.1460,-1.372,0.91]],
+    [25, [23.6742,-3.579,-3.87],[22.1122,-12.789,1.17],[7.0777,22.951,-2.44],[0.1466,-1.368,0.91]],
+    [27, [23.6805,-3.537,-3.87],[22.1164,-12.766,1.17],[7.0775,22.951,-2.44],[0.1472,-1.364,0.91]],
+    [33, [23.6995,-3.410,-3.87],[22.1290,-12.697,1.17],[7.0771,22.952,-2.44],[0.1491,-1.352,0.91]],
+  ],
+];
+
+// --- the brief's five ------------------------------------------------------
 
 test("an ordinary night returns null", () => {
   // Galactic centre far below the horizon, no bright planet high up.
@@ -752,10 +841,12 @@ test("a qualifying galaxy night returns a band with a finite angle", () => {
     { galacticCentre: { ra: 17.76, dec: -28.94, mag: 0 }, planets: [] },
     { latitude: 25, longitude: 0 }, new Date(Date.UTC(2026, 6, 15, 21, 0)), 430, 520,
   );
-  if (out) {
-    assert.equal(out.kind, "galaxy");
-    assert.ok(Number.isFinite(out.angle) && Number.isFinite(out.x) && Number.isFinite(out.y));
-  }
+  // Tightened from the brief's `if (out)`: on this night the band really does
+  // qualify, so a null here is a regression rather than an acceptable answer.
+  assert.equal(out?.kind, "galaxy");
+  if (out?.kind !== "galaxy") return;
+  assert.ok(Number.isFinite(out.angle) && Number.isFinite(out.x) && Number.isFinite(out.y));
+  assert.ok(Number.isFinite(out.length) && out.length > 0);
 });
 
 test("galaxy and planet are never returned together", () => {
@@ -770,137 +861,252 @@ test("galaxy and planet are never returned together", () => {
 });
 
 test("rare nights land near monthly across a simulated year", () => {
+  // Per-NIGHT occurrence, not per-instant firing: each night's dark hours are
+  // stepped through and the night is counted once if anything fires at any
+  // point in it. Counting instants instead would measure how narrow the firing
+  // window is rather than how often a rare night happens.
   let count = 0;
   for (let day = 0; day < 365; day++) {
-    const date = new Date(Date.UTC(2026, 0, 1 + day, 21, 0));
-    const out = rareNight(YEAR_FIXTURE_CANDIDATES(date), PRAGUE, date, 430, 520);
-    if (out) count++;
+    const dayUTC = Date.UTC(2026, 0, 1 + day);
+    const candidates = YEAR_FIXTURE_CANDIDATES(new Date(Date.UTC(2026, 0, 1 + day, 21, 0)));
+    const fired = DARK_HOURS.some(
+      (hour) => rareNight(candidates, PRAGUE, pragueInstant(dayUTC, hour), 430, 520) !== null,
+    );
+    if (fired) count++;
   }
   assert.ok(count >= 6 && count <= 24, `expected roughly monthly, got ${count} nights`);
 });
 
 test("the same night always gives the same answer", () => {
-  const date = new Date(Date.UTC(2026, 6, 15, 21, 0));
-  const a = rareNight(YEAR_FIXTURE_CANDIDATES(date), PRAGUE, date, 430, 520);
-  const b = rareNight(YEAR_FIXTURE_CANDIDATES(date), PRAGUE, date, 430, 520);
-  assert.deepEqual(a, b);
+  // The brief passed the identical Date twice, which only proves purity. The
+  // requirement is night-stability, so the hour is varied right across the
+  // night instead - including the afternoon before and the morning after,
+  // since the verdict belongs to the whole noon-to-noon night.
+  for (const { label, dayUTC } of HOURLY_NIGHTS) {
+    const candidates = YEAR_FIXTURE_CANDIDATES(new Date(dayUTC + 21 * 3600000));
+    const first = rareNight(candidates, PRAGUE, pragueInstant(dayUTC, 13), 430, 520);
+    for (let hour = 13; hour <= 35; hour++) {
+      const out = rareNight(candidates, PRAGUE, pragueInstant(dayUTC, hour), 430, 520);
+      assert.deepEqual(out, first, `${label}: local hour ${hour} disagreed with the afternoon before`);
+    }
+  }
 });
 
-// --- the rare night, beyond the brief's five -------------------------------
-//
-// The three brief tests above are deliberately loose: two of them pass whatever
-// `rareNight` returns. These are the ones that would actually fail if the
-// selection rule, the geometry or the guards were wrong.
+// --- night-stability, the requirement the brief's tests missed -------------
 
-// Instant and observer at which the galactic centre is on the meridian at
-// 71 deg altitude: found by sweeping 2026 for a night when the core culminates
-// inside the evening window at longitude 0.
-const BOTH_QUALIFY = new Date(Date.UTC(2026, 6, 2, 23, 0));
-const BOTH_OBSERVER = { latitude: -10, longitude: 0 };
-/** A planet sitting exactly on the core, so it passes the same altitude test. */
-const PLANET_ON_THE_CORE = { ra: 17.761, dec: -28.94, mag: -4, name: "Venus", colour: "#F4E3B1" };
-/** Circumpolar stand-in for the core, so the galaxy cannot qualify. */
-const NO_GALAXY = { ra: 0, dec: 89, mag: 2 };
+test("a rare night holds steady when the positions are re-read all night", () => {
+  // The fixture's positions genuinely move from snapshot to snapshot, so this
+  // is the test for "identical on every open": it is what the app does when it
+  // recomputes `rareCandidates` on every render. The verdict must not budge.
+  //
+  // A planet's drawn position does follow the positions it is handed, by a
+  // fraction of a pixel across one night, so coordinates are compared with a
+  // tolerance while the verdict itself is compared exactly.
+  for (let n = 0; n < HOURLY_NIGHTS.length; n++) {
+    const { label, dayUTC, expected } = HOURLY_NIGHTS[n];
+    const snapshots = HOURLY_FIXTURE[n];
+    assert.ok(snapshots?.length === 9, `${label}: expected nine snapshots`);
 
-test("when the galaxy and a planet both qualify, the galaxy wins and the planet is dropped", () => {
-  // Each half is checked on its own first, so this cannot pass by both halves
-  // simply failing - which is how the brief's own "never both" test can pass.
-  const galaxyAlone = rareNight(
+    let reference: RareNight = null;
+    let referenceSeen = false;
+    for (const [hour, ...row] of snapshots) {
+      const out = rareNight(candidatesFrom(row), PRAGUE, pragueInstant(dayUTC, hour), 430, 520);
+      assert.equal(out?.kind ?? null, expected, `${label}: local hour ${hour} gave ${out?.kind ?? "null"}`);
+      if (!referenceSeen) {
+        reference = out;
+        referenceSeen = true;
+        continue;
+      }
+      if (reference === null || out === null) {
+        assert.equal(out, reference, `${label}: local hour ${hour} appeared or vanished`);
+        continue;
+      }
+      assert.ok(Math.abs(out.x - reference.x) < 1, `${label}: x moved ${out.x - reference.x}px`);
+      assert.ok(Math.abs(out.y - reference.y) < 1, `${label}: y moved ${out.y - reference.y}px`);
+      if (out.kind === "galaxy" && reference.kind === "galaxy") {
+        assert.deepEqual(out, reference, `${label}: the band changed at local hour ${hour}`);
+      }
+    }
+  }
+});
+
+test("adjacent nights are not all the same, so night-keying is not a constant", () => {
+  // Guards against the obvious way to pass the stability test: always return
+  // null, or always return the same thing.
+  const verdicts = new Set<string>();
+  for (let day = 0; day < 120; day++) {
+    const dayUTC = Date.UTC(2026, 0, 1 + day);
+    const candidates = YEAR_FIXTURE_CANDIDATES(new Date(dayUTC + 21 * 3600000));
+    const out = rareNight(candidates, PRAGUE, pragueInstant(dayUTC, 22), 430, 520);
+    verdicts.add(out?.kind ?? "null");
+  }
+  assert.ok(verdicts.size > 1, "every night in four months gave the same verdict");
+});
+
+// --- the per-night count, and that both halves are reachable ---------------
+
+test("the simulated year is 12 nights from Prague: 7 galaxy and 5 planet", () => {
+  // Per-night occurrence, measured as in the band test above. The exact split
+  // is a change detector rather than a requirement - the requirement is the
+  // 6 to 24 band and that neither half is dead code.
+  let galaxy = 0;
+  let planet = 0;
+  for (let day = 0; day < 365; day++) {
+    const dayUTC = Date.UTC(2026, 0, 1 + day);
+    const candidates = YEAR_FIXTURE_CANDIDATES(new Date(Date.UTC(2026, 0, 1 + day, 21, 0)));
+    const kinds = new Set<string>();
+    for (const hour of DARK_HOURS) {
+      const out = rareNight(candidates, PRAGUE, pragueInstant(dayUTC, hour), 430, 520);
+      if (out) kinds.add(out.kind);
+    }
+    if (kinds.has("galaxy")) galaxy++;
+    else if (kinds.has("planet")) planet++;
+  }
+  assert.ok(galaxy > 0, "no galaxy night anywhere in the year: the galaxy half is dead code");
+  assert.ok(planet > 0, "no planet night anywhere in the year: the planet half is dead code");
+  assert.equal(galaxy, 7, `galaxy nights: ${galaxy}`);
+  assert.equal(planet, 5, `planet nights: ${planet}`);
+});
+
+test("the galaxy is reachable at southern and at northern latitudes alike", () => {
+  // The previous rule anchored the band on the galactic core, whose culmination
+  // altitude from Prague is 90 - |50.08 + 28.94| = 10.98 degrees - permanently
+  // under any sensible floor, so the galaxy could never happen at the one
+  // latitude that matters. Anchoring on the best-placed point of the band fixes
+  // that, and this is the test that would catch it coming back.
+  const summerNight = pragueInstant(Date.UTC(2026, 8, 9), 22);
+  const fromPrague = rareNight({ galacticCentre: { ...GALACTIC_CENTRE }, planets: [] }, PRAGUE, summerNight, 430, 520);
+  assert.equal(fromPrague?.kind, "galaxy", "Prague should get galaxy nights in late summer");
+
+  const sydney = { latitude: -33.87, longitude: 151.21 };
+  const sydneyNight = new Date(Date.UTC(2026, 6, 1) + 22 * 3600000 - (151.21 / 15) * 3600000);
+  const fromSydney = rareNight({ galacticCentre: { ...GALACTIC_CENTRE }, planets: [] }, sydney, sydneyNight, 430, 520);
+  assert.equal(fromSydney?.kind, "galaxy", "Sydney should get galaxy nights in July");
+});
+
+test("the band anchors on Cygnus from Prague and on Sagittarius from Sydney", () => {
+  // Independent check that the anchor follows the sky rather than a constant.
+  // Deneb (Cygnus, galactic longitude 84) and Shaula (by the core, galactic
+  // longitude 352) are published positions; whichever of them the band's centre
+  // passes closest to during the night says which stretch was chosen.
+  const closestApproach = (band: RareNight, observer: Observer, dayUTC: number, ra: number, dec: number): number => {
+    assert.ok(band, "expected a band");
+    if (!band) return Infinity;
+    let best = Infinity;
+    for (let hour = 19; hour <= 25; hour += 0.5) {
+      const date = new Date(dayUTC + hour * 3600000 - (observer.longitude / 15) * 3600000);
+      const { altitude, azimuth } = horizontal({ ra, dec, mag: 2 }, observer, date);
+      const p = project(altitude, azimuth, 430, 520);
+      if (p) best = Math.min(best, Math.hypot(p.x - band.x, p.y - band.y));
+    }
+    return best;
+  };
+
+  const pragueDay = Date.UTC(2026, 8, 9);
+  const pragueBand = rareNight(
+    { galacticCentre: { ...GALACTIC_CENTRE }, planets: [] }, PRAGUE, pragueInstant(pragueDay, 22), 430, 520,
+  );
+  const pragueDeneb = closestApproach(pragueBand, PRAGUE, pragueDay, 20.6905, 45.2803);
+  const pragueShaula = closestApproach(pragueBand, PRAGUE, pragueDay, 17.5601, -37.104);
+  assert.ok(pragueDeneb < 20, `from Prague the band should sit in Cygnus, but Deneb is ${pragueDeneb.toFixed(0)}px away`);
+  assert.ok(pragueShaula > 100, `from Prague the band should not be in Sagittarius (${pragueShaula.toFixed(0)}px)`);
+
+  const sydney = { latitude: -33.87, longitude: 151.21 };
+  const sydneyDay = Date.UTC(2026, 6, 1);
+  const sydneyBand = rareNight(
     { galacticCentre: { ...GALACTIC_CENTRE }, planets: [] },
-    BOTH_OBSERVER, BOTH_QUALIFY, 430, 520,
+    sydney, new Date(sydneyDay + 22 * 3600000 - (151.21 / 15) * 3600000), 430, 520,
   );
-  assert.equal(galaxyAlone?.kind, "galaxy", "the galaxy should qualify on its own");
-
-  const planetAlone = rareNight(
-    { galacticCentre: { ...NO_GALAXY }, planets: [PLANET_ON_THE_CORE] },
-    BOTH_OBSERVER, BOTH_QUALIFY, 430, 520,
-  );
-  assert.equal(planetAlone?.kind, "planet", "the planet should qualify on its own");
-
-  const both = rareNight(
-    { galacticCentre: { ...GALACTIC_CENTRE }, planets: [PLANET_ON_THE_CORE] },
-    BOTH_OBSERVER, BOTH_QUALIFY, 430, 520,
-  );
-  assert.equal(both?.kind, "galaxy", "with both qualifying, the galaxy must win");
+  const sydneyShaula = closestApproach(sydneyBand, sydney, sydneyDay, 17.5601, -37.104);
+  const sydneyDeneb = closestApproach(sydneyBand, sydney, sydneyDay, 20.6905, 45.2803);
+  assert.ok(sydneyShaula < 20, `from Sydney the band should sit by the core, but Shaula is ${sydneyShaula.toFixed(0)}px away`);
+  assert.ok(sydneyDeneb > 100, `from Sydney the band should not be in Cygnus (${sydneyDeneb.toFixed(0)}px)`);
 });
+
+// --- the geometry ----------------------------------------------------------
 
 test("the band is oriented along the real galactic plane, not an arbitrary angle", () => {
-  // Independent check on the galactic-to-equatorial rotation inside `rareNight`,
-  // using published galactic latitudes of real stars. Measured perpendicular to
-  // the returned band line, a star's distance from the line must scale with how
-  // far off the galactic plane it actually is. Nothing here comes from sky.ts.
-  //
-  // Near the plane:  Shaula (b = -2.2), Sargas (b = -4.4), Alnasl (b = -6.1).
-  // Far off it:      Antares (b = +15),  Vega (b = +19).
-  const band = rareNight(
-    { galacticCentre: { ...GALACTIC_CENTRE }, planets: [] },
-    BOTH_OBSERVER, BOTH_QUALIFY, 430, 520,
-  );
+  // Independent check on the galactic rotation inside `rareNight`, using
+  // published galactic latitudes of real stars. Measured perpendicular to the
+  // returned band line, a star's distance from the line must scale with how far
+  // off the galactic plane it actually is. Nothing here comes from sky.ts.
+  const dayUTC = Date.UTC(2026, 8, 9);
+  const band = rareNight({ galacticCentre: { ...GALACTIC_CENTRE }, planets: [] }, PRAGUE, pragueInstant(dayUTC, 22), 430, 520);
   assert.equal(band?.kind, "galaxy");
   if (band?.kind !== "galaxy") return;
 
   const radians = Math.PI / 180;
   const ux = Math.cos(band.angle * radians);
   const uy = Math.sin(band.angle * radians);
-  const offLine = (ra: number, dec: number): number => {
-    const { altitude, azimuth } = horizontal({ ra, dec, mag: 2 }, BOTH_OBSERVER, BOTH_QUALIFY);
+  const offLine = (ra: number, dec: number, date: Date): number => {
+    const { altitude, azimuth } = horizontal({ ra, dec, mag: 2 }, PRAGUE, date);
     const p = project(altitude, azimuth, 430, 520);
-    assert.ok(p, `landmark at ${ra}h should be on the panel`);
-    return Math.abs((p!.x - band.x) * uy - (p!.y - band.y) * ux);
+    if (!p) return Infinity;
+    return Math.abs((p.x - band.x) * uy - (p.y - band.y) * ux);
   };
 
-  // The plate scale near the zenith here is about 2.3 px per degree, so a star
-  // a couple of degrees off the plane should sit within roughly 15 px of the
-  // line and one fifteen degrees off it well beyond 25 px.
+  // The band is drawn at the night's peak moment, which the caller is not told.
+  // Find it the honest way: the moment of the night at which the returned line
+  // best fits Deneb, a star 2 degrees off the galactic plane. If the band were
+  // oriented wrongly, no moment of the night would fit it at all.
+  let fitted = pragueInstant(dayUTC, 19);
+  let fit = Infinity;
+  for (let hour = 19; hour <= 25; hour += 0.5) {
+    const date = pragueInstant(dayUTC, hour);
+    const d = offLine(20.6905, 45.2803, date);
+    if (d < fit) {
+      fit = d;
+      fitted = date;
+    }
+  }
+  assert.ok(fit < 10, `the band never lines up with Deneb: best fit ${fit.toFixed(1)}px`);
+
+  // At that moment the plate scale is about 2.4px per degree, so distance from
+  // the line must rise with |galactic latitude|.
   const nearPlane = [
-    { name: "Shaula", ra: 17.5601, dec: -37.104 },
-    { name: "Sargas", ra: 17.6220, dec: -42.998 },
-    { name: "Alnasl", ra: 18.0966, dec: -30.424 },
+    { name: "Sadr", ra: 20.3705, dec: 40.2567, b: 2.2 },
+    { name: "Albireo", ra: 19.5120, dec: 27.9597, b: 4.6 },
+    { name: "Capella", ra: 5.2782, dec: 45.9980, b: 4.6 },
   ];
   for (const s of nearPlane) {
-    const d = offLine(s.ra, s.dec);
-    assert.ok(d < 22, `${s.name} is near the galactic plane but landed ${d.toFixed(1)}px off the band`);
+    const d = offLine(s.ra, s.dec, fitted);
+    assert.ok(d < 25, `${s.name} is ${s.b} deg off the plane but landed ${d.toFixed(1)}px off the band`);
   }
-  const antares = offLine(16.4901, -26.432);
-  const vega = offLine(18.6156, 38.784);
-  assert.ok(antares > 25, `Antares is 15 deg off the plane but landed only ${antares.toFixed(1)}px off the band`);
-  assert.ok(vega > 25, `Vega is 19 deg off the plane but landed only ${vega.toFixed(1)}px off the band`);
-  assert.ok(offLine(17.5601, -37.104) < antares, "the ordering by galactic latitude is wrong");
+  const vega = offLine(18.6156, 38.7837, fitted);
+  assert.ok(vega > 30, `Vega is 19 deg off the plane but landed only ${vega.toFixed(1)}px off the band`);
+  assert.ok(offLine(20.3705, 40.2567, fitted) < vega, "the ordering by galactic latitude is wrong");
 });
 
-test("the band is a geometry because it moves: same instant, different observer", () => {
-  const near = rareNight(
-    { galacticCentre: { ...GALACTIC_CENTRE }, planets: [] },
-    { latitude: -10, longitude: 0 }, BOTH_QUALIFY, 430, 520,
+test("the band's geometry depends on the observer, which is why it is not a flag", () => {
+  const dayUTC = Date.UTC(2026, 6, 1);
+  const bands = [
+    { latitude: -33.87, longitude: 151.21 },
+    { latitude: -20, longitude: 151.21 },
+  ].map((observer) =>
+    rareNight(
+      { galacticCentre: { ...GALACTIC_CENTRE }, planets: [] },
+      observer,
+      new Date(dayUTC + 22 * 3600000 - (151.21 / 15) * 3600000),
+      430, 520,
+    ),
   );
-  const south = rareNight(
-    { galacticCentre: { ...GALACTIC_CENTRE }, planets: [] },
-    { latitude: -28, longitude: 0 }, BOTH_QUALIFY, 430, 520,
+  for (const band of bands) assert.equal(band?.kind, "galaxy");
+  const [south, north] = bands;
+  if (south?.kind !== "galaxy" || north?.kind !== "galaxy") return;
+  assert.ok(
+    Math.abs(south.angle - north.angle) > 1 || Math.abs(south.y - north.y) > 10,
+    "two observers a thousand kilometres apart got the same band geometry",
   );
-  assert.equal(near?.kind, "galaxy");
-  assert.equal(south?.kind, "galaxy");
-  if (near?.kind !== "galaxy" || south?.kind !== "galaxy") return;
-  assert.ok(Math.abs(near.y - south.y) > 20, "the core should sit higher on the panel further south");
-  assert.ok(Math.abs(near.length - south.length) > 5, "the band's span should differ between observers");
-
-  // And across the qualifying nights the orientation drifts, so a fixed angle
-  // would be wrong.
-  const later = rareNight(
-    { galacticCentre: { ...GALACTIC_CENTRE }, planets: [] },
-    BOTH_OBSERVER, new Date(Date.UTC(2026, 6, 8, 23, 0)), 430, 520,
-  );
-  assert.equal(later?.kind, "galaxy");
-  if (later?.kind !== "galaxy") return;
-  assert.ok(Math.abs(later.angle - near.angle) > 1, "the band angle should change from night to night");
 });
 
 test("every number in a returned geometry is finite and on the panel", () => {
   const seen = [
-    rareNight({ galacticCentre: { ...GALACTIC_CENTRE }, planets: [] }, BOTH_OBSERVER, BOTH_QUALIFY, 430, 520),
-    rareNight({ galacticCentre: { ...NO_GALAXY }, planets: [PLANET_ON_THE_CORE] }, BOTH_OBSERVER, BOTH_QUALIFY, 430, 520),
+    rareNight({ galacticCentre: { ...GALACTIC_CENTRE }, planets: [] }, PRAGUE, pragueInstant(Date.UTC(2026, 8, 9), 22), 430, 520),
+    rareNight(YEAR_FIXTURE_CANDIDATES(new Date(Date.UTC(2026, 1, 12, 21, 0))), PRAGUE, pragueInstant(Date.UTC(2026, 1, 12), 22), 430, 520),
   ];
+  assert.equal(seen[0]?.kind, "galaxy");
+  assert.equal(seen[1]?.kind, "planet");
   for (const out of seen) {
-    assert.ok(out, "both of these should qualify");
     if (!out) continue;
     assert.ok(Number.isFinite(out.x) && out.x >= 0 && out.x <= 430, `x ${out.x}`);
     assert.ok(Number.isFinite(out.y) && out.y >= 0 && out.y <= 520, `y ${out.y}`);
@@ -914,131 +1120,183 @@ test("every number in a returned geometry is finite and on the panel", () => {
   }
 });
 
+// --- selection rules -------------------------------------------------------
+
+test("when the galaxy and a planet both qualify, the galaxy wins and the planet is dropped", () => {
+  // Each half is checked on its own first, so this cannot pass by both halves
+  // simply failing - which is how the brief's own "never both" test can pass.
+  const night = pragueInstant(Date.UTC(2026, 8, 9), 22);
+  const planet = { ra: 21.262, dec: 50, mag: -4, name: "Venus", colour: "#F4E3B1" };
+
+  const galaxyAlone = rareNight({ galacticCentre: { ...GALACTIC_CENTRE }, planets: [] }, PRAGUE, night, 430, 520);
+  assert.equal(galaxyAlone?.kind, "galaxy", "the galaxy should qualify on its own");
+
+  // Same night, with the core replaced by a circumpolar stand-in so only the
+  // planet can qualify.
+  const planetAlone = rareNight(
+    { galacticCentre: { ...OFF_PLANE_CORE }, planets: [planet] }, PRAGUE, night, 430, 520,
+  );
+  assert.equal(planetAlone?.kind, "planet", "the planet should qualify on its own");
+
+  const both = rareNight({ galacticCentre: { ...GALACTIC_CENTRE }, planets: [planet] }, PRAGUE, night, 430, 520);
+  assert.equal(both?.kind, "galaxy", "with both qualifying, the galaxy must win");
+});
+
+test("a planet must be bright as well as high", () => {
+  const night = pragueInstant(Date.UTC(2026, 8, 9), 22);
+  const high = (mag: number) => rareNight(
+    { galacticCentre: { ...OFF_PLANE_CORE }, planets: [{ ra: 21.262, dec: 50, mag, name: "Venus", colour: "#F4E3B1" }] },
+    PRAGUE, night, 430, 520,
+  );
+  assert.equal(high(-3)?.kind, "planet", "a bright planet overhead qualifies");
+  assert.equal(high(-1.9), null, "dimmer than the threshold is not rare, however high it is");
+  assert.equal(high(1.2), null, "Saturn-bright is never a rare night");
+});
+
+test("a planet must be at its highest inside the night, not merely up", () => {
+  // This planet is 80 degrees up when the dark window opens and still 52
+  // degrees up at midnight - plainly "visible, and high". But it crossed the
+  // meridian an hour before dusk, so the night never contains its best moment
+  // and it is not a rare night.
+  const night = pragueInstant(Date.UTC(2026, 8, 9), 22);
+  const pastItsBest = { ra: 17.262, dec: 50, mag: -4, name: "Venus", colour: "#F4E3B1" };
+  const atDusk = horizontal(pastItsBest, PRAGUE, pragueInstant(Date.UTC(2026, 8, 9), 19)).altitude;
+  const atMidnight = horizontal(pastItsBest, PRAGUE, night).altitude;
+  assert.ok(atDusk > 70, `the planet should be high at dusk: altitude ${atDusk}`);
+  assert.ok(atMidnight > 45, `and still high at midnight: altitude ${atMidnight}`);
+  assert.equal(
+    rareNight({ galacticCentre: { ...OFF_PLANE_CORE }, planets: [pastItsBest] }, PRAGUE, night, 430, 520),
+    null,
+    "high all night but already past its best is an ordinary night",
+  );
+});
+
+test("the brightest qualifying planet wins, with a stable tie-break", () => {
+  const night = pragueInstant(Date.UTC(2026, 8, 9), 22);
+  const pick = (planets: RareCandidates["planets"]) => rareNight(
+    { galacticCentre: { ra: 0, dec: 89, mag: 2 }, planets }, PRAGUE, night, 430, 520,
+  );
+  const dim = { ra: 21.262, dec: 50, mag: -2.4, name: "Jupiter", colour: "#F2E6CF" };
+  const bright = { ra: 21.262, dec: 50, mag: -4.4, name: "Venus", colour: "#F4E3B1" };
+
+  const forwards = pick([dim, bright]);
+  const backwards = pick([bright, dim]);
+  assert.equal(forwards?.kind === "planet" && forwards.colour, bright.colour);
+  assert.equal(backwards?.kind === "planet" && backwards.colour, bright.colour);
+
+  const a = pick([bright]);
+  const b = pick([dim]);
+  assert.ok(a?.kind === "planet" && b?.kind === "planet" && a.r > b.r, "the brighter planet should be larger");
+
+  const tie = pick([
+    { ...dim, mag: -3, name: "Zeta", colour: "#111111" },
+    { ...dim, mag: -3, name: "Alpha", colour: "#222222" },
+  ]);
+  assert.equal(tie?.kind === "planet" && tie.colour, "#222222");
+});
+
+test("only the best night of a block is rare, so a long run collapses", () => {
+  // Jupiter qualifies on most nights of its apparition; a rule that fired on
+  // all of them would make the rare night ordinary scenery for months. Count
+  // the nights on which the planet qualifies at all, against the nights that
+  // are actually returned, over the first four months.
+  let returned = 0;
+  for (let day = 0; day < 120; day++) {
+    const dayUTC = Date.UTC(2026, 0, 1 + day);
+    const candidates = YEAR_FIXTURE_CANDIDATES(new Date(dayUTC + 21 * 3600000));
+    if (DARK_HOURS.some((hour) => rareNight(candidates, PRAGUE, pragueInstant(dayUTC, hour), 430, 520))) returned++;
+  }
+  assert.ok(returned >= 3 && returned <= 12, `four months should hold a handful of occasions, got ${returned}`);
+});
+
+// --- guards ----------------------------------------------------------------
+
 test("malformed input returns null rather than a geometry full of NaN", () => {
   // `horizontal` returns NaN components by design, and a NaN in an SVG
   // coordinate renders nothing at all without raising anything, so this is the
   // guard that keeps a silent blank sky from happening.
+  const night = pragueInstant(Date.UTC(2026, 8, 9), 22);
   const ok = { galacticCentre: { ...GALACTIC_CENTRE }, planets: [] };
-  assert.equal(rareNight({ galacticCentre: { ra: NaN, dec: -28.94, mag: 2 }, planets: [] }, BOTH_OBSERVER, BOTH_QUALIFY, 430, 520), null);
-  assert.equal(rareNight({ galacticCentre: { ra: 17.761, dec: Infinity, mag: 2 }, planets: [] }, BOTH_OBSERVER, BOTH_QUALIFY, 430, 520), null);
-  assert.equal(rareNight(ok, { latitude: NaN, longitude: 0 }, BOTH_QUALIFY, 430, 520), null);
-  assert.equal(rareNight(ok, { latitude: -10, longitude: NaN }, BOTH_QUALIFY, 430, 520), null);
-  assert.equal(rareNight(ok, BOTH_OBSERVER, new Date(NaN), 430, 520), null);
-  assert.equal(rareNight(ok, BOTH_OBSERVER, BOTH_QUALIFY, 0, 520), null);
-  assert.equal(rareNight(ok, BOTH_OBSERVER, BOTH_QUALIFY, 430, NaN), null);
+  assert.equal(rareNight({ galacticCentre: { ra: NaN, dec: -28.94, mag: 2 }, planets: [] }, PRAGUE, night, 430, 520), null);
+  assert.equal(rareNight({ galacticCentre: { ra: 17.761, dec: Infinity, mag: 2 }, planets: [] }, PRAGUE, night, 430, 520), null);
+  assert.equal(rareNight(ok, { latitude: NaN, longitude: 0 }, night, 430, 520), null);
+  assert.equal(rareNight(ok, { latitude: 50, longitude: NaN }, night, 430, 520), null);
+  assert.equal(rareNight(ok, PRAGUE, new Date(NaN), 430, 520), null);
+  assert.equal(rareNight(ok, PRAGUE, night, 0, 520), null);
+  assert.equal(rareNight(ok, PRAGUE, night, 430, NaN), null);
 
   // A bad planet is skipped, not emitted, and does not take the good one down.
+  const good = { ra: 21.262, dec: 50, mag: -4, name: "Venus", colour: "#F4E3B1" };
   const mixed = rareNight(
     {
-      galacticCentre: { ...NO_GALAXY },
+      galacticCentre: { ra: 0, dec: 89, mag: 2 },
       planets: [
-        { ra: NaN, dec: -28.94, mag: -4, name: "Bad", colour: "#fff" },
-        { ra: 17.761, dec: NaN, mag: -4, name: "Bad", colour: "#fff" },
-        { ra: 17.761, dec: -28.94, mag: NaN, name: "Bad", colour: "#fff" },
-        { ra: 17.761, dec: -28.94, mag: -4, name: "Bad", colour: "" },
-        PLANET_ON_THE_CORE,
+        { ra: NaN, dec: 50, mag: -4, name: "Bad", colour: "#fff" },
+        { ra: 21.262, dec: NaN, mag: -4, name: "Bad", colour: "#fff" },
+        { ra: 21.262, dec: 50, mag: NaN, name: "Bad", colour: "#fff" },
+        { ra: 21.262, dec: 50, mag: -4, name: "Bad", colour: "" },
+        good,
       ],
     },
-    BOTH_OBSERVER, BOTH_QUALIFY, 430, 520,
+    PRAGUE, night, 430, 520,
   );
   assert.equal(mixed?.kind, "planet");
-  assert.equal(mixed?.kind === "planet" && mixed.colour, PLANET_ON_THE_CORE.colour);
+  assert.equal(mixed?.kind === "planet" && mixed.colour, good.colour);
 });
 
 test("the galactic centre's placeholder magnitude is never consulted", () => {
-  // `skyBodies.ts` invents mag 2 for the core because it is a surface-brightness
-  // feature with no meaningful point magnitude. Any brightness test on it would
-  // be meaningless, so a nonsense magnitude must change nothing.
+  // `skyBodies.ts` invents a magnitude for the core because the Milky Way is a
+  // surface-brightness feature with no meaningful point magnitude. Any
+  // brightness test on it would be meaningless, so a nonsense value must change
+  // nothing at all.
+  const night = pragueInstant(Date.UTC(2026, 8, 9), 22);
   const base = rareNight(
-    { galacticCentre: { ra: 17.761, dec: -28.94, mag: 2 }, planets: [] },
-    BOTH_OBSERVER, BOTH_QUALIFY, 430, 520,
+    { galacticCentre: { ra: 17.761, dec: -28.94, mag: 2 }, planets: [] }, PRAGUE, night, 430, 520,
   );
+  assert.equal(base?.kind, "galaxy", "sanity: this night must be a galaxy night for the test to mean anything");
   for (const mag of [-30, 0, 99, NaN]) {
     const out = rareNight(
-      { galacticCentre: { ra: 17.761, dec: -28.94, mag }, planets: [] },
-      BOTH_OBSERVER, BOTH_QUALIFY, 430, 520,
+      { galacticCentre: { ra: 17.761, dec: -28.94, mag }, planets: [] }, PRAGUE, night, 430, 520,
     );
     assert.deepEqual(out, base, `mag ${mag} changed the answer`);
   }
 });
 
-test("a planet must be bright as well as high", () => {
-  const high = (mag: number) => rareNight(
-    { galacticCentre: { ...NO_GALAXY }, planets: [{ ...PLANET_ON_THE_CORE, mag }] },
-    BOTH_OBSERVER, BOTH_QUALIFY, 430, 520,
-  );
-  assert.equal(high(-3)?.kind, "planet", "a bright planet at culmination qualifies");
-  assert.equal(high(-1.9), null, "dimmer than the threshold is not rare, however high it is");
-  assert.equal(high(1.2), null, "Saturn-bright is never a rare night");
-});
+test("a core that is not on the galactic plane cannot define the band", () => {
+  // Guard, not a nicety: the band is built by crossing the supplied core with
+  // the galactic pole, so any other point would span an unrelated great circle
+  // that would then be drawn as "the Milky Way". The real core is at galactic
+  // latitude -0.05 degrees; a degree of slack is allowed, ten degrees is not.
+  const night = pragueInstant(Date.UTC(2026, 8, 9), 22);
+  const onPlane = rareNight({ galacticCentre: { ...GALACTIC_CENTRE }, planets: [] }, PRAGUE, night, 430, 520);
+  assert.equal(onPlane?.kind, "galaxy", "sanity: the real core is accepted");
 
-test("a planet must be at its highest, not merely up", () => {
-  // Same planet, same night, six hours earlier: still well above the horizon
-  // from this observer, but nowhere near the meridian.
-  const early = new Date(BOTH_QUALIFY.getTime() - 3 * 3600000);
-  const out = rareNight(
-    { galacticCentre: { ...NO_GALAXY }, planets: [PLANET_ON_THE_CORE] },
-    BOTH_OBSERVER, early, 430, 520,
-  );
-  const { altitude } = horizontal(PLANET_ON_THE_CORE, BOTH_OBSERVER, early);
-  assert.ok(altitude > 30, `the planet should still be up: altitude ${altitude}`);
-  assert.equal(out, null, "up but not culminating is an ordinary night");
-});
-
-test("the brightest qualifying planet wins, with a stable tie-break", () => {
-  const pick = (planets: RareCandidates["planets"]) => rareNight(
-    { galacticCentre: { ...NO_GALAXY }, planets }, BOTH_OBSERVER, BOTH_QUALIFY, 430, 520,
-  );
-  const dim = { ...PLANET_ON_THE_CORE, mag: -2.4, name: "Jupiter", colour: "#F2E6CF" };
-  const bright = { ...PLANET_ON_THE_CORE, mag: -4.4, name: "Venus", colour: "#F4E3B1" };
-  assert.equal(pick([dim, bright])?.kind === "planet" && pick([dim, bright]).colour, bright.colour);
-  assert.equal(pick([bright, dim])?.kind === "planet" && pick([bright, dim]).colour, bright.colour);
-
-  // Brighter is drawn larger.
-  const a = pick([bright]);
-  const b = pick([dim]);
-  assert.ok(a?.kind === "planet" && b?.kind === "planet" && a.r > b.r, "the brighter planet should be larger");
-
-  // Equal magnitude: resolved by name, so the same night never flickers.
-  const tie = pick([
-    { ...PLANET_ON_THE_CORE, mag: -3, name: "Zeta", colour: "#111111" },
-    { ...PLANET_ON_THE_CORE, mag: -3, name: "Alpha", colour: "#222222" },
-  ]);
-  assert.equal(tie?.kind === "planet" && tie.colour, "#222222");
-});
-
-test("the galaxy is confined to the evening", () => {
-  // Same culmination geometry, shifted a sidereal day minus twelve hours so the
-  // core is on the meridian at local noon instead. Nothing about the sky changed
-  // except the clock.
-  const noon = new Date(Date.UTC(2026, 6, 2, 11, 0));
-  const { altitude } = horizontal(GALACTIC_CENTRE, BOTH_OBSERVER, noon);
-  assert.ok(altitude < 0, `sanity: the core is below the horizon at this hour (${altitude})`);
-  assert.equal(rareNight({ galacticCentre: { ...GALACTIC_CENTRE }, planets: [] }, BOTH_OBSERVER, noon, 430, 520), null);
-
-  // And an observer whose longitude puts this instant in their morning gets
-  // nothing even though the core is high, because it is not their evening.
-  const sydney = { latitude: -33.87, longitude: 151.21 };
-  const morning = rareNight({ galacticCentre: { ...GALACTIC_CENTRE }, planets: [] }, sydney, new Date(Date.UTC(2026, 6, 2, 21, 0)), 430, 520);
-  assert.equal(morning, null, "07:00 local is not the evening, however high the core is");
-});
-
-test("the simulated year is 14 planet nights and no galaxy nights from Prague", () => {
-  // The band assertion above is the requirement; this records what the chosen
-  // thresholds actually produce, so a change to them shows up as a diff rather
-  // than as a silent slide within the band.
-  //
-  // Zero galaxy nights is correct, not a bug: from 50 deg N the galactic centre
-  // never climbs above 11 deg, so the Milky Way core is never comfortably high
-  // in Prague. A southern user would see galaxy nights instead.
-  let galaxy = 0;
-  let planet = 0;
-  for (let day = 0; day < 365; day++) {
-    const date = new Date(Date.UTC(2026, 0, 1 + day, 21, 0));
-    const out = rareNight(YEAR_FIXTURE_CANDIDATES(date), PRAGUE, date, 430, 520);
-    if (out?.kind === "galaxy") galaxy++;
-    if (out?.kind === "planet") planet++;
+  for (const core of [
+    { ra: 17.761, dec: -18.94, mag: 2 },  // ten degrees north of the plane
+    { ra: 0, dec: 89, mag: 2 },           // near the celestial pole
+    { ra: 6, dec: 0, mag: 2 },            // the right declination, the wrong place
+  ]) {
+    assert.equal(
+      rareNight({ galacticCentre: core, planets: [] }, PRAGUE, night, 430, 520),
+      null,
+      `a core at ra ${core.ra}, dec ${core.dec} should not define a galactic plane`,
+    );
   }
-  assert.equal(galaxy, 0, `galaxy nights: ${galaxy}`);
-  assert.equal(planet, 14, `planet nights: ${planet}`);
+});
+
+test("the night runs to dawn, so the verdict does not flip at midnight", () => {
+  // Local 23:00 and local 01:00 are the same night. Keying on the calendar date
+  // instead would split one night in two and could change the answer at
+  // midnight, which is exactly when someone is most likely to be looking.
+  const dayUTC = Date.UTC(2026, 8, 9);
+  const candidates = YEAR_FIXTURE_CANDIDATES(new Date(dayUTC + 21 * 3600000));
+  const beforeMidnight = rareNight(candidates, PRAGUE, pragueInstant(dayUTC, 23), 430, 520);
+  const afterMidnight = rareNight(candidates, PRAGUE, pragueInstant(dayUTC, 25), 430, 520);
+  assert.ok(beforeMidnight, "this night should be rare, or the test proves nothing");
+  assert.deepEqual(afterMidnight, beforeMidnight);
+
+  // And the following night is a different night, decided separately.
+  const nextCandidates = YEAR_FIXTURE_CANDIDATES(new Date(dayUTC + 24 * 3600000 + 21 * 3600000));
+  const nextNight = rareNight(nextCandidates, PRAGUE, pragueInstant(dayUTC + 86400000, 23), 430, 520);
+  assert.notDeepEqual(nextNight, beforeMidnight, "two different nights returned the identical verdict");
 });

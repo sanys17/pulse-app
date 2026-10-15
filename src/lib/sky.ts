@@ -179,102 +179,276 @@ export function projectStars(
 // ---------------------------------------------------------------------------
 // The rare night
 //
-// Rarity, not visibility, is the requirement. The product decision was "rarely,
-// maybe once a month", and plain astronomical visibility does not deliver that:
-// from a mid-latitude a bright planet sits above a modest altitude on most
-// nights, and the Milky Way core is up during evening hours for months at a
-// stretch. So both tests ask for a body at its best rather than merely present:
-// above an absolute floor AND within 1% of the highest altitude it can ever
-// reach from this latitude - which is to say, crossing the meridian right now,
-// within roughly half an hour either side.
+// Three things have to be true at once, and they pull against each other.
 //
-// Expressing "high" as a fraction of the body's own culmination altitude, rather
-// than as a fixed number of degrees, is what makes the rule portable: 60 deg is
-// unreachable from Reykjavik and trivial from Quito, whereas "at its highest" is
-// the same event everywhere.
+// 1. RARITY, NOT VISIBILITY. Plain astronomical visibility fires on most nights
+//    from a mid-latitude, which turns the rare night into ordinary scenery. So
+//    qualifying is not enough on its own: see (3).
 //
-// Measured against the 2026 planet fixture in tests/sky.test.mts, sampled at
-// 21:00 UTC from Prague, these thresholds fire on 14 of 365 nights.
+// 2. ONE ANSWER PER NIGHT. The decision is keyed to the local night, never to
+//    the instant, because a refresh must not be able to spoil it. Everything is
+//    decided from night-level facts: whether the body reaches its highest point
+//    *inside* that night's dark window, how high it gets, and how central that
+//    moment is in the window. The clock is not a rarity knob; the sky is.
+//
+// 3. THE PEAK OF A RUN, NOT A NARROW WINDOW. A body that qualifies at all tends
+//    to qualify for weeks on end, because its transit creeps through the dark
+//    window at about four minutes a night. So the calendar is cut into fixed
+//    blocks of BLOCK_NIGHTS and only the best-scoring qualifying night in a
+//    block is rare. A Jupiter apparition that qualifies on eighty nights
+//    collapses to about four occasions, spread through its season.
+//
+// The block grid is the one arbitrary thing here: it is anchored to the Unix
+// epoch rather than to anything astronomical. It is still fully determined by
+// the date, with no random and no user-dependent term, and it is what converts
+// a long run into a few occasions without narrowing the astronomy.
 // ---------------------------------------------------------------------------
 
+/** The Milky Way, as a band: core position, on-screen orientation and span. */
+export type GalaxyBand = { kind: "galaxy"; x: number; y: number; angle: number; length: number };
+
+/** One bright planet, as a dot. */
+export type PlanetDot = { kind: "planet"; x: number; y: number; r: number; colour: string };
+
 /**
- * The Milky Way band, or a single bright planet, or nothing. Never both: see
- * `rareNight` for which one wins.
+ * The Milky Way band, or a single bright planet, or nothing. Never both: when
+ * both qualify on the chosen night the galaxy wins, because the band is a
+ * whole-sky feature that would wash out a single dot.
  *
  * The galaxy is a geometry rather than a flag because the galactic plane's
  * orientation on screen changes with the hour and the observer's latitude:
- * `x`/`y` is the core, `angle` is degrees clockwise from the panel's +x axis,
- * `length` is the on-panel span of the band in pixels.
+ * `angle` is degrees clockwise from the panel's +x axis and `length` is the
+ * band's on-panel span in pixels, both centred on `x`/`y`.
  */
-export type RareNight =
-  | { kind: "galaxy"; x: number; y: number; angle: number; length: number }
-  | { kind: "planet"; x: number; y: number; r: number; colour: string }
-  | null;
+export type RareNight = GalaxyBand | PlanetDot | null;
 
-/** The core must clear the horizon murk before the band is worth drawing at all. */
-const GALAXY_MIN_ALTITUDE = 20;
-/** Local solar hours during which a galaxy night may be shown (wraps past midnight). */
-const GALAXY_EVENING_FROM = 20;
-const GALAXY_EVENING_UNTIL = 1;
+/**
+ * The dark window, in hours after local solar midnight of the night's evening
+ * date: 19:00 to 01:00 the next morning. Local solar time is used rather than
+ * the device clock so the same instant means the same thing everywhere.
+ */
+const NIGHT_FROM_HOUR = 19;
+const NIGHT_UNTIL_HOUR = 25;
+const NIGHT_STEP_MINUTES = 30;
 
-/** A planet must be properly overhead, not just up. */
+/** Nights per selection block: only the best qualifying night in a block is rare. */
+const BLOCK_NIGHTS = 14;
+
+/**
+ * Two nights whose peak is this close to equally central count as equally good,
+ * and the earlier one wins. This is what makes the choice immune to the body's
+ * own motion: a planet drifts by a few seconds of transit time over one night,
+ * so without a tolerance an exact tie could flip between two openings of the
+ * app. Four minutes separate consecutive nights, so a two-minute tolerance
+ * never merges nights that are genuinely different.
+ */
+const SCORE_EPSILON_MINUTES = 2;
+
+/** The Milky Way must pass high overhead, not skirt the horizon. */
+const GALAXY_MIN_ALTITUDE = 72;
+
+/** A planet must be properly overhead, not merely up. */
 const PLANET_MIN_ALTITUDE = 45;
+
 /** Brighter than any fixed star by a clear margin (Sirius is -1.46). */
 const PLANET_MAX_MAGNITUDE = -2;
 
 /**
- * Fraction of its own culmination altitude a body must reach: 0.99 means
- * "within 1% of the highest it ever gets from here", about half an hour either
- * side of the meridian. This is the threshold that creates the rarity.
+ * Half-width, in degrees of galactic longitude, of the bright inner Milky Way.
+ * Beyond about 100 degrees from the core the band fades into the anticentre and
+ * is not what anyone means by "the Milky Way", so the anchor is never placed
+ * there. From 50 N this stretch reaches the zenith near galactic longitude 92
+ * (Cygnus), which is exactly the part that is overhead on a summer evening.
  */
-const CULMINATION_FRACTION = 0.99;
+const BRIGHT_STRETCH = 100;
+
+/** Galactic-plane sampling: tangent half-span for the angle, step for the span. */
+const BAND_TANGENT_SPAN = 4;
+const BAND_STEP = 5;
 
 /** Brightest magnitude the planet radius ramp accounts for (Venus at its best). */
 const PLANET_MAG_BRIGHTEST = -4.9;
 const PLANET_RADIUS_BRIGHTEST = 3.6;
 const PLANET_RADIUS_DIMMEST = 2.4;
 
-/** Galactic-plane sampling: tangent half-span for the angle, and the band's reach. */
-const BAND_TANGENT_SPAN = 4;
-const BAND_REACH = 60;
-const BAND_STEP = 5;
-
-/** Galactic-to-equatorial rotation (J2000): north galactic pole, and the NCP's galactic longitude. */
-const NGP_RA_DEGREES = 192.85948;
+/** North galactic pole, J2000: RA 12h 51m 26s, Dec +27 07' 42". */
+const NGP_RA_HOURS = 192.85948 / 15;
 const NGP_DEC_DEGREES = 27.12825;
-const NCP_GALACTIC_LONGITUDE = 122.93192;
+
+/** How far off the galactic plane the supplied core may sit, in degrees. */
+const CORE_PLANE_TOLERANCE = 1;
+
+const MS_PER_DAY = 86400000;
+const MS_PER_MINUTE = 60000;
+
+type Vec3 = readonly [number, number, number];
+
+function unitFromEquatorial(ra: number, dec: number): Vec3 {
+  const hourAngle = ra * 15 * DEG;
+  const declination = dec * DEG;
+  const cosDec = Math.cos(declination);
+  return [cosDec * Math.cos(hourAngle), cosDec * Math.sin(hourAngle), Math.sin(declination)];
+}
+
+function equatorialFromUnit(v: Vec3): { ra: number; dec: number } {
+  const ra = (((Math.atan2(v[1], v[0]) / DEG) / 15) % 24 + 24) % 24;
+  return { ra, dec: Math.asin(clamp(v[2], -1, 1)) / DEG };
+}
+
+const NGP = unitFromEquatorial(NGP_RA_HOURS, NGP_DEC_DEGREES);
 
 /**
- * A point on the galactic plane (galactic latitude 0) at galactic longitude
- * `l` degrees, as equatorial RA (hours) and Dec (degrees), J2000.
+ * The galactic plane as two perpendicular directions in the equatorial frame:
+ * `towardCore` is galactic longitude 0 and `towardRising` is galactic longitude
+ * 90, so a point at longitude `l` is `towardCore * cos(l) + towardRising * sin(l)`.
  *
- * Standard rotation, specialised to b = 0:
- *   sin(dec) = cos(decNGP) * cos(lNCP - l)
- *   ra = raNGP + atan2(sin(lNCP - l), -sin(decNGP) * cos(lNCP - l))
- * At l = 0 this returns RA 17.7603 h, Dec -28.92 deg, the published position of
- * Sgr A*, which is the check that the rotation is the right way round.
+ * The core comes from the caller, so the plane is pinned to the same point the
+ * adapter reports rather than to a second hard-coded copy of it; only the pole
+ * is a constant here. `towardRising` is the pole crossed into the core, which is
+ * the direction of increasing galactic longitude - from Sagittarius towards
+ * Cygnus, not away from it.
  */
-function galacticPlanePoint(l: number): { ra: number; dec: number } {
-  const delta = (NCP_GALACTIC_LONGITUDE - l) * DEG;
-  const cosDelta = Math.cos(delta);
-  const dec = Math.asin(clamp(Math.cos(NGP_DEC_DEGREES * DEG) * cosDelta, -1, 1)) / DEG;
-  const raDegrees =
-    NGP_RA_DEGREES + Math.atan2(Math.sin(delta), -Math.sin(NGP_DEC_DEGREES * DEG) * cosDelta) / DEG;
-  return { ra: (((raDegrees / 15) % 24) + 24) % 24, dec };
+function planeBasis(core: SkyBody): { towardCore: Vec3; towardRising: Vec3 } | null {
+  const towardCore = unitFromEquatorial(core.ra, core.dec);
+
+  // The core has to lie on the galactic plane, or it does not define it: any
+  // other point, crossed with the pole, spans some unrelated great circle that
+  // would be drawn as "the Milky Way". Sgr A* is at galactic latitude -0.05
+  // degrees, so a degree of slack is generous.
+  const offPlane = Math.abs(
+    NGP[0] * towardCore[0] + NGP[1] * towardCore[1] + NGP[2] * towardCore[2],
+  );
+  if (!Number.isFinite(offPlane) || offPlane > Math.sin(CORE_PLANE_TOLERANCE * DEG)) return null;
+
+  const cross: Vec3 = [
+    NGP[1] * towardCore[2] - NGP[2] * towardCore[1],
+    NGP[2] * towardCore[0] - NGP[0] * towardCore[2],
+    NGP[0] * towardCore[1] - NGP[1] * towardCore[0],
+  ];
+  const norm = Math.hypot(cross[0], cross[1], cross[2]);
+  if (!Number.isFinite(norm) || norm < 1e-6) return null;
+  const towardRising: Vec3 = [cross[0] / norm, cross[1] / norm, cross[2] / norm];
+  for (const n of [...towardCore, ...towardRising]) if (!Number.isFinite(n)) return null;
+  return { towardCore, towardRising };
+}
+
+/** The point on the galactic plane at galactic longitude `l` degrees. */
+function planePoint(basis: { towardCore: Vec3; towardRising: Vec3 }, l: number): SkyBody {
+  const c = Math.cos(l * DEG);
+  const s = Math.sin(l * DEG);
+  const v: Vec3 = [
+    basis.towardCore[0] * c + basis.towardRising[0] * s,
+    basis.towardCore[1] * c + basis.towardRising[1] * s,
+    basis.towardCore[2] * c + basis.towardRising[2] * s,
+  ];
+  return { ...equatorialFromUnit(v), mag: 0 };
 }
 
 /**
- * Local solar hour (0-24) from UTC and longitude. Deliberately derived from the
- * longitude rather than from `Date.getHours()`, which would read the machine's
- * timezone and make the same instant mean different things on different devices.
+ * The highest point of the bright Milky Way at one instant: its altitude and its
+ * galactic longitude.
+ *
+ * Solved rather than searched. For a point at longitude `l`,
+ * `sin(altitude) = sin(alt of longitude 0) * cos(l) + sin(alt of longitude 90) * sin(l)`,
+ * because altitude is the dot product with the zenith and the plane is spanned
+ * by those two directions. That is a single sinusoid in `l`, so its peak is at
+ * `l0 = atan2(a90, a0)` with `sin(altitude) = hypot(a0, a90)`, and restricting
+ * the search to the bright stretch is a clamp. Two altitude evaluations, exact.
+ *
+ * Returns `null` if anything is non-finite.
  */
-function localSolarHour(date: Date, observer: Observer): number {
-  const utcHours = (date.getTime() / 3600000) % 24;
-  return (((utcHours + observer.longitude / 15) % 24) + 24) % 24;
+function brightestPlanePoint(
+  basis: { towardCore: Vec3; towardRising: Vec3 },
+  observer: Observer,
+  date: Date,
+): { altitude: number; longitude: number } | null {
+  const a0 = horizontal(planePoint(basis, 0), observer, date).altitude;
+  const a90 = horizontal(planePoint(basis, 90), observer, date).altitude;
+  if (!Number.isFinite(a0) || !Number.isFinite(a90)) return null;
+
+  const s0 = Math.sin(a0 * DEG);
+  const s90 = Math.sin(a90 * DEG);
+  const amplitude = Math.hypot(s0, s90);
+  if (!Number.isFinite(amplitude) || amplitude === 0) return null;
+
+  const peak = Math.atan2(s90, s0) / DEG; // already in (-180, 180]
+  const longitude = clamp(peak, -BRIGHT_STRETCH, BRIGHT_STRETCH);
+  const altitude = Math.asin(clamp(amplitude * Math.cos((longitude - peak) * DEG), -1, 1)) / DEG;
+  if (!Number.isFinite(altitude) || !Number.isFinite(longitude)) return null;
+
+  return { altitude, longitude };
 }
 
-function isEvening(hour: number): boolean {
-  return hour >= GALAXY_EVENING_FROM || hour < GALAXY_EVENING_UNTIL;
+/** Milliseconds between UTC and the observer's local solar time. */
+function localOffsetMs(observer: Observer): number {
+  return (observer.longitude / 15) * 3600000;
+}
+
+/**
+ * Which local night an instant belongs to, as a day count. Nights run from local
+ * solar noon to local solar noon, so 23:00 and 01:00 either side of midnight are
+ * the same night - which is the whole point of keying on this rather than on the
+ * calendar date.
+ */
+function nightOf(date: Date, observer: Observer): number {
+  const local = date.getTime() + localOffsetMs(observer);
+  return Math.floor((local - 12 * 3600000) / MS_PER_DAY);
+}
+
+/** UTC milliseconds of local solar `hour` on night `night`. */
+function nightInstantMs(night: number, observer: Observer, hour: number): number {
+  return night * MS_PER_DAY + hour * 3600000 - localOffsetMs(observer);
+}
+
+const NIGHT_SAMPLES = Math.round(((NIGHT_UNTIL_HOUR - NIGHT_FROM_HOUR) * 60) / NIGHT_STEP_MINUTES) + 1;
+
+/**
+ * The best moment of one night for whatever `altitudeAt` measures.
+ *
+ * Returns `null` unless the maximum falls strictly inside the dark window: a
+ * body still climbing at 01:00, or already past its best at 19:00, did not have
+ * its night. `instant` is the grid sample itself, so it is identical for every
+ * call about this night; `offsetMinutes` is refined by fitting a parabola to the
+ * three samples around the peak, which is what makes consecutive nights
+ * distinguishable (they differ by about four minutes).
+ */
+function bestMomentOfNight(
+  night: number,
+  observer: Observer,
+  altitudeAt: (date: Date) => number,
+): { instant: Date; altitude: number; offsetMinutes: number } | null {
+  const values: number[] = [];
+  let bestIndex = -1;
+  let bestValue = -Infinity;
+
+  for (let i = 0; i < NIGHT_SAMPLES; i++) {
+    const hour = NIGHT_FROM_HOUR + (i * NIGHT_STEP_MINUTES) / 60;
+    const value = altitudeAt(new Date(nightInstantMs(night, observer, hour)));
+    values.push(value);
+    if (Number.isFinite(value) && value > bestValue) {
+      bestValue = value;
+      bestIndex = i;
+    }
+  }
+
+  if (bestIndex <= 0 || bestIndex >= NIGHT_SAMPLES - 1) return null;
+
+  const before = values[bestIndex - 1];
+  const after = values[bestIndex + 1];
+  if (!Number.isFinite(before) || !Number.isFinite(after)) return null;
+
+  const curvature = before - 2 * bestValue + after;
+  const shift = curvature < 0 ? clamp((before - after) / (2 * curvature), -1, 1) : 0;
+  if (!Number.isFinite(shift)) return null;
+
+  const hour = NIGHT_FROM_HOUR + (bestIndex * NIGHT_STEP_MINUTES) / 60;
+  const instantMs = nightInstantMs(night, observer, hour);
+  const centreMs = nightInstantMs(night, observer, (NIGHT_FROM_HOUR + NIGHT_UNTIL_HOUR) / 2);
+  const peakMs = instantMs + shift * NIGHT_STEP_MINUTES * MS_PER_MINUTE;
+  const offsetMinutes = Math.abs(peakMs - centreMs) / MS_PER_MINUTE;
+  if (!Number.isFinite(offsetMinutes)) return null;
+
+  return { instant: new Date(instantMs), altitude: bestValue, offsetMinutes };
 }
 
 /** The highest altitude a body at this declination can ever reach from this latitude. */
@@ -282,37 +456,100 @@ function culminationAltitude(dec: number, latitude: number): number {
   return 90 - Math.abs(latitude - dec);
 }
 
-/** Above `floor`, and within `CULMINATION_FRACTION` of its own best possible altitude. */
-function atItsHighest(altitude: number, dec: number, observer: Observer, floor: number): boolean {
-  if (!Number.isFinite(altitude) || altitude < floor) return false;
-  const peak = culminationAltitude(dec, observer.latitude);
-  if (!Number.isFinite(peak) || peak <= 0) return false;
-  return altitude >= peak * CULMINATION_FRACTION;
+type NightVerdict =
+  | { kind: "galaxy"; instant: Date; offsetMinutes: number; longitude: number }
+  | { kind: "planet"; instant: Date; offsetMinutes: number; planet: SkyBody & { colour: string } };
+
+/**
+ * What one night offers, before rarity is applied. The galaxy wins a night it
+ * shares with a planet; among planets the brightest wins, with the name as a
+ * tie-break so the answer cannot depend on array order.
+ */
+function nightVerdict(
+  candidates: RareCandidates,
+  basis: { towardCore: Vec3; towardRising: Vec3 } | null,
+  observer: Observer,
+  night: number,
+): NightVerdict | null {
+  if (basis) {
+    const best = bestMomentOfNight(night, observer, (date) => {
+      const found = brightestPlanePoint(basis, observer, date);
+      return found ? found.altitude : NaN;
+    });
+    if (best && best.altitude >= GALAXY_MIN_ALTITUDE) {
+      const anchor = brightestPlanePoint(basis, observer, best.instant);
+      if (anchor) {
+        return {
+          kind: "galaxy",
+          instant: best.instant,
+          offsetMinutes: best.offsetMinutes,
+          longitude: anchor.longitude,
+        };
+      }
+    }
+  }
+
+  let chosen: NightVerdict | null = null;
+  let chosenMag = Infinity;
+  let chosenName = "";
+
+  for (const planet of candidates.planets ?? []) {
+    if (!planet) continue;
+    if (!Number.isFinite(planet.ra) || !Number.isFinite(planet.dec) || !Number.isFinite(planet.mag)) continue;
+    if (typeof planet.colour !== "string" || planet.colour.length === 0) continue;
+    if (planet.mag > PLANET_MAX_MAGNITUDE) continue;
+    // Cheap rejection: a body whose culmination altitude cannot clear the floor
+    // never will, whatever the hour, so there is nothing to scan.
+    if (culminationAltitude(planet.dec, observer.latitude) < PLANET_MIN_ALTITUDE) continue;
+
+    const best = bestMomentOfNight(night, observer, (date) => horizontal(planet, observer, date).altitude);
+    if (!best || best.altitude < PLANET_MIN_ALTITUDE) continue;
+
+    const name = typeof planet.name === "string" ? planet.name : "";
+    if (chosen && !(planet.mag < chosenMag || (planet.mag === chosenMag && name < chosenName))) continue;
+
+    chosen = { kind: "planet", instant: best.instant, offsetMinutes: best.offsetMinutes, planet };
+    chosenMag = planet.mag;
+    chosenName = name;
+  }
+
+  return chosen;
 }
 
 /**
- * The band's screen geometry, or `null` if it cannot be placed with finite
- * numbers. The core's `x`/`y` comes from the caller's galactic-centre body, so
- * the band sits exactly where that body projects; the `angle` and `length` come
- * from `galacticPlanePoint`, because the plane's run across the sky is not
- * something a single point can tell us.
+ * The band's screen geometry at one instant, anchored on the highest point of
+ * the bright Milky Way rather than on the core.
+ *
+ * Anchoring on the best-placed point is what makes this work at any latitude:
+ * from the southern hemisphere it picks Sagittarius, and from 50 N it picks the
+ * Cygnus-Aquila stretch, which is the part of the Milky Way that is actually
+ * overhead on a summer evening. Anchoring on the core instead would be dead
+ * code north of about 40 N, where the core never rises clear of the horizon.
+ *
+ * `angle` is the plane's screen tangent at the anchor, and `length` is the span
+ * of the bright stretch measured along that tangent, so the panel's own clipping
+ * shortens the band near the horizon.
  */
 function buildBand(
-  centre: { x: number; y: number },
+  basis: { towardCore: Vec3; towardRising: Vec3 },
+  anchorLongitude: number,
   observer: Observer,
   date: Date,
   width: number,
   height: number,
-): RareNight {
+): GalaxyBand | null {
   const place = (l: number): { x: number; y: number } | null => {
-    const { ra, dec } = galacticPlanePoint(l);
-    if (!Number.isFinite(ra) || !Number.isFinite(dec)) return null;
-    const { altitude, azimuth } = horizontal({ ra, dec, mag: 0 }, observer, date);
+    const point = planePoint(basis, l);
+    if (!Number.isFinite(point.ra) || !Number.isFinite(point.dec)) return null;
+    const { altitude, azimuth } = horizontal(point, observer, date);
     return project(altitude, azimuth, width, height);
   };
 
-  const before = place(-BAND_TANGENT_SPAN);
-  const after = place(BAND_TANGENT_SPAN);
+  const anchor = place(anchorLongitude);
+  if (!anchor) return null;
+
+  const before = place(anchorLongitude - BAND_TANGENT_SPAN);
+  const after = place(anchorLongitude + BAND_TANGENT_SPAN);
   if (!before || !after) return null;
 
   const angle = Math.atan2(after.y - before.y, after.x - before.x) / DEG;
@@ -320,41 +557,70 @@ function buildBand(
   // A band has no head or tail, so fold the direction into (-90, 90].
   const folded = ((((angle + 90) % 180) + 180) % 180) - 90;
 
-  // Reach along the plane in both directions, as far as the panel allows. A
-  // sample that falls below the horizon or off the panel simply does not extend
-  // the band; the farthest surviving one on each side sets that side's length.
-  let back = 0;
-  let forward = 0;
-  for (let l = BAND_STEP; l <= BAND_REACH; l += BAND_STEP) {
-    const negative = place(-l);
-    if (negative) back = Math.max(back, Math.hypot(negative.x - centre.x, negative.y - centre.y));
-    const positive = place(l);
-    if (positive) forward = Math.max(forward, Math.hypot(positive.x - centre.x, positive.y - centre.y));
+  const ux = Math.cos(folded * DEG);
+  const uy = Math.sin(folded * DEG);
+  let nearest = 0;
+  let farthest = 0;
+  for (let l = -BRIGHT_STRETCH; l <= BRIGHT_STRETCH; l += BAND_STEP) {
+    const point = place(l);
+    if (!point) continue;
+    const along = (point.x - anchor.x) * ux + (point.y - anchor.y) * uy;
+    if (!Number.isFinite(along)) continue;
+    nearest = Math.min(nearest, along);
+    farthest = Math.max(farthest, along);
   }
 
-  const length = back + forward;
+  const length = farthest - nearest;
   if (!Number.isFinite(length) || length <= 0) return null;
 
-  return { kind: "galaxy", x: centre.x, y: centre.y, angle: folded, length };
+  return { kind: "galaxy", x: anchor.x, y: anchor.y, angle: folded, length };
+}
+
+function buildDot(
+  planet: SkyBody & { colour: string },
+  observer: Observer,
+  date: Date,
+  width: number,
+  height: number,
+): PlanetDot | null {
+  const { altitude, azimuth } = horizontal(planet, observer, date);
+  const point = project(altitude, azimuth, width, height);
+  if (!point) return null;
+
+  const magSpan = PLANET_MAX_MAGNITUDE - PLANET_MAG_BRIGHTEST;
+  const faintness = clamp((planet.mag - PLANET_MAG_BRIGHTEST) / magSpan, 0, 1);
+  const r = PLANET_RADIUS_BRIGHTEST + (PLANET_RADIUS_DIMMEST - PLANET_RADIUS_BRIGHTEST) * faintness;
+  if (!Number.isFinite(r) || r <= 0) return null;
+
+  return { kind: "planet", x: point.x, y: point.y, r, colour: planet.colour };
 }
 
 /**
  * What, if anything, makes tonight's sky worth more than a star field.
  *
  * Returns the Milky Way band, or one bright planet, or `null`. **Never both.**
- * When both qualify the galaxy wins: it is a whole-sky feature that would wash
- * out a single dot, and for most observers it is the rarer of the two. When
- * several planets qualify, the brightest wins, with the name as a tie-break so
- * the same night always gives the same answer.
+ *
+ * The answer is a property of the local night, not of the moment: every instant
+ * between 19:00 and 01:00 local solar time on the same night gets the same
+ * verdict, and the geometry is built at that night's peak moment rather than at
+ * the caller's instant, so a refresh cannot change or spoil it. Two consequences
+ * the renderer should know about:
+ *
+ *  - The body is drawn where it is at its best for the night, which is not
+ *    necessarily where it is at the moment of the call. For a decorative sky
+ *    that is the intent; it is not a planetarium.
+ *  - `candidates` must be sampled once per night, not per render. The verdict
+ *    tolerates a planet's own motion across a night (see SCORE_EPSILON_MINUTES),
+ *    but a planet's drawn position follows the positions it is handed.
  *
  * `horizontal()` returns NaN for malformed input by design, so every path here
  * checks finiteness before anything reaches the returned geometry: a NaN in an
  * SVG coordinate fails silently, with no error and nothing drawn.
  *
- * Note on the galaxy: it is judged on altitude and the evening window only,
- * never on `mag`. The galactic centre's magnitude in the adapter is an invented
- * placeholder - the core is a surface-brightness feature, not a point source -
- * so comparing it to anything would be meaningless.
+ * The galaxy is judged on altitude and on when it peaks, never on `mag`. The
+ * core's magnitude in the adapter is an invented placeholder - the Milky Way is
+ * a surface-brightness feature, not a point source - so comparing it to anything
+ * would be meaningless.
  */
 export function rareNight(
   candidates: RareCandidates,
@@ -368,50 +634,34 @@ export function rareNight(
   if (!observer || !Number.isFinite(observer.latitude) || !Number.isFinite(observer.longitude)) return null;
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
 
-  const centre = candidates.galacticCentre;
-  if (
-    centre &&
-    Number.isFinite(centre.ra) &&
-    Number.isFinite(centre.dec) &&
-    isEvening(localSolarHour(date, observer))
-  ) {
-    const { altitude, azimuth } = horizontal(centre, observer, date);
-    if (atItsHighest(altitude, centre.dec, observer, GALAXY_MIN_ALTITUDE)) {
-      const point = project(altitude, azimuth, width, height);
-      // A band that cannot be placed with finite numbers falls through to the
-      // planets rather than being returned half-formed.
-      if (point) {
-        const band = buildBand(point, observer, date, width, height);
-        if (band) return band;
-      }
+  const core = candidates.galacticCentre;
+  const basis =
+    core && Number.isFinite(core.ra) && Number.isFinite(core.dec) ? planeBasis(core) : null;
+
+  const tonight = nightOf(date, observer);
+  if (!Number.isFinite(tonight)) return null;
+
+  // Only the best qualifying night of the block is rare. Nights are compared on
+  // how central their peak is in the dark window; within SCORE_EPSILON_MINUTES
+  // they count as equal and the earlier one keeps the slot, which is what makes
+  // the comparison immune to the bodies' own motion during a night.
+  const blockStart = Math.floor(tonight / BLOCK_NIGHTS) * BLOCK_NIGHTS;
+  let winner: NightVerdict | null = null;
+  let winnerNight = -Infinity;
+
+  for (let night = blockStart; night < blockStart + BLOCK_NIGHTS; night++) {
+    const verdict = nightVerdict(candidates, basis, observer, night);
+    if (!verdict) continue;
+    if (!winner || verdict.offsetMinutes < winner.offsetMinutes - SCORE_EPSILON_MINUTES) {
+      winner = verdict;
+      winnerNight = night;
     }
   }
 
-  let best: { x: number; y: number; mag: number; colour: string; name: string } | null = null;
-  for (const planet of candidates.planets ?? []) {
-    if (!planet) continue;
-    if (!Number.isFinite(planet.ra) || !Number.isFinite(planet.dec) || !Number.isFinite(planet.mag)) continue;
-    if (typeof planet.colour !== "string" || planet.colour.length === 0) continue;
-    if (planet.mag > PLANET_MAX_MAGNITUDE) continue;
+  if (!winner || winnerNight !== tonight) return null;
 
-    const { altitude, azimuth } = horizontal(planet, observer, date);
-    if (!atItsHighest(altitude, planet.dec, observer, PLANET_MIN_ALTITUDE)) continue;
-
-    const point = project(altitude, azimuth, width, height);
-    if (!point) continue;
-
-    const name = typeof planet.name === "string" ? planet.name : "";
-    if (!best || planet.mag < best.mag || (planet.mag === best.mag && name < best.name)) {
-      best = { x: point.x, y: point.y, mag: planet.mag, colour: planet.colour, name };
-    }
+  if (winner.kind === "galaxy") {
+    return basis ? buildBand(basis, winner.longitude, observer, winner.instant, width, height) : null;
   }
-
-  if (!best) return null;
-
-  const magSpan = PLANET_MAX_MAGNITUDE - PLANET_MAG_BRIGHTEST;
-  const faintness = clamp((best.mag - PLANET_MAG_BRIGHTEST) / magSpan, 0, 1);
-  const r = PLANET_RADIUS_BRIGHTEST + (PLANET_RADIUS_DIMMEST - PLANET_RADIUS_BRIGHTEST) * faintness;
-  if (!Number.isFinite(r) || r <= 0) return null;
-
-  return { kind: "planet", x: best.x, y: best.y, r, colour: best.colour };
+  return buildDot(winner.planet, observer, winner.instant, width, height);
 }
