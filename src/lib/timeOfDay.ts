@@ -1,13 +1,24 @@
 export type SkyPhase = "morning" | "afternoon" | "night";
 
-// Local hours at which the sky changes: morning from 05:00, afternoon from 11:00, night from 18:00.
-export const SKY_BOUNDARY_HOURS: readonly number[] = [5, 11, 18];
+// Local hours at which the sky changes, ascending, paired with the phase each one starts:
+// morning from 05:00, afternoon from 11:00, night from 18:00. `skyPhase` derives its answer
+// from this table, so the two can never drift apart.
+const BOUNDARIES: ReadonlyArray<readonly [hour: number, phase: SkyPhase]> = [
+  [5, "morning"],
+  [11, "afternoon"],
+  [18, "night"],
+];
+
+export const SKY_BOUNDARY_HOURS: readonly number[] = BOUNDARIES.map(([hour]) => hour);
 
 export function skyPhase(date: Date): SkyPhase {
   const hour = date.getHours();
-  if (hour >= 18 || hour < 5) return "night";
-  if (hour >= 11) return "afternoon";
-  return "morning";
+  // Before the first boundary of the day the previous day's last phase is still running.
+  let phase = BOUNDARIES[BOUNDARIES.length - 1][1];
+  for (const [boundaryHour, boundaryPhase] of BOUNDARIES) {
+    if (hour >= boundaryHour) phase = boundaryPhase;
+  }
+  return phase;
 }
 
 // The first boundary strictly after `date`, in local time. Searches today and tomorrow so the
