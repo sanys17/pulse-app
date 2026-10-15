@@ -254,17 +254,19 @@ function buildArcClip(progress: number): string {
 // raw pixels, so the panel cannot become `height: auto` without breaking the star projection.
 const PANEL_H = 520;
 
-// morning: REAL sky-only art (1290x1922, sun measured into PROVISIONAL_SUN.morning).
-// afternoon/night: still PLACEHOLDER — the OLD mountain photographs, wired up only so the sky
-// stack is reviewable. The sky-only assets for those two do not exist in the repo yet.
-// WHEN THEY LAND: swap the two paths AND re-measure PROVISIONAL_SUN.afternoon in
-// src/components/SkyLight.tsx against the delivered photograph.
-// null = no photograph; the phase paints NIGHT_SKY instead. Night's useful tonal range is
-// sRGB 9-49, so a photograph of it is near-black with grain — the panel's own grain layer
-// supplies the texture, and a gradient cannot band the way a WebP of a near-black ramp does.
+// Both day skies are the real sky-only art (1290x1922), with their sun positions measured
+// out of the delivered files rather than guessed. Night has no photograph at all: its useful
+// tonal range is sRGB 9-49, so a photograph of it is near-black with grain — the panel's own
+// grain layer supplies the texture, and a gradient cannot band the way a WebP of a near-black
+// ramp does. null therefore means "paint NIGHT_SKY instead".
+//
+// KNOWN, NOT YET FIXED: over the afternoon sky the "Best: N days" line measures 4.0:1 at its
+// worst pixel against the 4.5:1 it needs. It is rgba(255,255,255,0.75), and translucent text
+// composites with the sky behind it, so it gains less contrast the brighter that sky is.
+// Making it solid #EAECF4 takes it to 4.8:1 without touching the scrim.
 const SKY_IMAGES: Record<SkyPhase, string | null> = {
   morning: "/assets/morning_sky.webp",
-  afternoon: "/assets/afternoon.webp",
+  afternoon: "/assets/afternoon_sky.webp",
   night: null,
 };
 

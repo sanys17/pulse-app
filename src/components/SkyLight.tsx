@@ -1,14 +1,15 @@
-// TODO: re-measure when the real sky assets land. These are provisional anchors chosen
-// against the old mountain placeholders; the contract is image first (measure the sun
-// from the delivered photograph, then pass it in).
 // Normalized 0-1 positions of the sun ON THE PHOTOGRAPH (not the panel) — Home's
 // imagePointToPanel() maps these through the object-fit: cover crop.
-// morning: MEASURED from public/assets/morning_sky.webp (brightest point of the solar disc).
-// afternoon: still PROVISIONAL — guessed against the old placeholder art, re-measure when the
-// real afternoon sky lands.
+//
+// Both are now MEASURED from the delivered art (brightest point of the solar disc), which is
+// the contract: image first, then measure. Re-measure either one if its photograph is
+// replaced — a sun anchor that no longer matches its sky puts the beams in the wrong place,
+// and nothing will fail loudly if it does.
+//   morning:   public/assets/morning_sky.webp
+//   afternoon: public/assets/afternoon_sky.webp
 export const PROVISIONAL_SUN = {
   morning: { x: 0.744, y: 0.28 },
-  afternoon: { x: 0.62, y: 0.13 },
+  afternoon: { x: 0.698, y: 0.305 },
 } as const;
 
 /**
