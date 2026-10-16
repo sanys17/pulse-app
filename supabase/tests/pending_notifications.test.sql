@@ -168,14 +168,16 @@ do $$ declare a constant uuid := 'aaaaaaaa-0000-0000-0000-000000000001'; b const
   update public.notification_preferences set friend_requests = true where user_id = a;
 end $$;
 -- ===== [C] habits and morning summary =====
-insert into public.habits (id, user_id, name, icon, color, frequency, created_at, reminder_time) values
-  ('cccccccc-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'Meditate', 'x', 'blue', 'daily',  '2026-01-01', '20:00'),
-  ('cccccccc-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000001', 'Read',     'x', 'blue', 'daily',  '2026-01-02', '20:00'),
-  ('cccccccc-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'Plan week','x', 'blue', 'weekly', '2026-01-03', '20:00'),
-  ('cccccccc-0000-0000-0000-000000000004', 'aaaaaaaa-0000-0000-0000-000000000001', 'Run',      'x', 'blue', 'daily',  '2026-01-04', '07:30'),
-  ('cccccccc-0000-0000-0000-000000000005', 'aaaaaaaa-0000-0000-0000-000000000001', 'Stretch',  'x', 'blue', 'daily',  '2026-01-05', null),
-  ('cccccccc-0000-0000-0000-000000000006', 'aaaaaaaa-0000-0000-0000-000000000001', 'Journal',  'x', 'blue', 'daily',  '2026-01-06', '20:00'),
-  ('cccccccc-0000-0000-0000-000000000007', 'aaaaaaaa-0000-0000-0000-000000000001', 'Walk',     'x', 'blue', 'daily',  '2026-01-07', '20:00');
+-- 'Plan week' was frequency 'weekly', which 013 replaced with a weekday set pinned to
+-- Monday — exactly what the old rule meant, so every assertion below is unchanged.
+insert into public.habits (id, user_id, name, icon, color, frequency, interval_days, start_date, weekdays, created_at, reminder_time) values
+  ('cccccccc-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'Meditate', 'x', 'blue', 'daily',    null, null, null,                 '2026-01-01', '20:00'),
+  ('cccccccc-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000001', 'Read',     'x', 'blue', 'daily',    null, null, null,                 '2026-01-02', '20:00'),
+  ('cccccccc-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'Plan week','x', 'blue', 'weekdays', null, null, '{1}'::smallint[],    '2026-01-03', '20:00'),
+  ('cccccccc-0000-0000-0000-000000000004', 'aaaaaaaa-0000-0000-0000-000000000001', 'Run',      'x', 'blue', 'daily',    null, null, null,                 '2026-01-04', '07:30'),
+  ('cccccccc-0000-0000-0000-000000000005', 'aaaaaaaa-0000-0000-0000-000000000001', 'Stretch',  'x', 'blue', 'daily',    null, null, null,                 '2026-01-05', null),
+  ('cccccccc-0000-0000-0000-000000000006', 'aaaaaaaa-0000-0000-0000-000000000001', 'Journal',  'x', 'blue', 'daily',    null, null, null,                 '2026-01-06', '20:00'),
+  ('cccccccc-0000-0000-0000-000000000007', 'aaaaaaaa-0000-0000-0000-000000000001', 'Walk',     'x', 'blue', 'daily',    null, null, null,                 '2026-01-07', '20:00');
 
 do $$ declare a constant uuid := 'aaaaaaaa-0000-0000-0000-000000000001'; r record; begin
   -- Monday 2026-11-02 (CET): 20:00 local = 19:00Z. Habits sharing a time arrive as ONE notification;
@@ -286,6 +288,45 @@ do $$ begin
   -- E2's first alert (09:00Z) has not been logged by the earlier dedupe test
   assert pg_temp.cnt('2026-10-21 09:00:00+00', 'aaaaaaaa-0000-0000-0000-000000000001', 'calendar') = 1,
     'one corrupt profile must not stop other users reminders';
+end $$;
+
+-- ===== [F] cadence (migration 013) =====
+-- habit_due_on is the SQL mirror of isDueOn() in src/lib/cadence.ts. Nothing crosses
+-- that boundary at runtime, so these assertions are the only thing holding the two
+-- implementations together.
+do $$ begin
+  assert public.habit_due_on('daily', null, null, null, date '2026-11-02'), 'daily is always due';
+
+  assert public.habit_due_on('interval', 2::smallint, date '2026-11-02', null, date '2026-11-02'), 'interval due on its start day';
+  assert not public.habit_due_on('interval', 2::smallint, date '2026-11-02', null, date '2026-11-03'), 'interval silent on the off day';
+  assert public.habit_due_on('interval', 2::smallint, date '2026-11-02', null, date '2026-11-04'), 'interval due two days on';
+  assert not public.habit_due_on('interval', 2::smallint, date '2026-11-02', null, date '2026-11-01'), 'interval not due before its start';
+
+  assert public.habit_due_on('weekdays', null, null, '{1,3,5}'::smallint[], date '2026-11-02'), 'Mon/Wed/Fri due on Monday';
+  assert not public.habit_due_on('weekdays', null, null, '{1,3,5}'::smallint[], date '2026-11-01'), 'Mon/Wed/Fri silent on Sunday';
+end $$;
+
+-- B has a device. Creatine is every two days from Monday 2026-11-02 at 20:00 local
+-- (19:00Z in CET); Gym is Mon/Wed/Fri at 21:00 local (20:00Z), so the two never share
+-- a notification and can be asserted apart.
+insert into public.habits (id, user_id, name, icon, color, frequency, interval_days, start_date, weekdays, created_at, reminder_time) values
+  ('cccccccc-0000-0000-0000-000000000011', 'aaaaaaaa-0000-0000-0000-000000000002', 'Creatine', 'x', 'blue', 'interval', 2::smallint, date '2026-11-02', null,              '2026-01-01', '20:00'),
+  ('cccccccc-0000-0000-0000-000000000012', 'aaaaaaaa-0000-0000-0000-000000000002', 'Gym',      'x', 'blue', 'weekdays', null,        null,             '{1,3,5}'::smallint[], '2026-01-02', '21:00');
+
+do $$ declare b constant uuid := 'aaaaaaaa-0000-0000-0000-000000000002'; begin
+  assert pg_temp.cnt('2026-11-02 19:00:00+00', b, 'habit') = 1, 'interval habit reminds on its start day';
+  assert pg_temp.cnt('2026-11-03 19:00:00+00', b, 'habit') = 0, 'interval habit must not remind on its off day';
+  assert pg_temp.cnt('2026-11-04 19:00:00+00', b, 'habit') = 1, 'interval habit reminds again two days later';
+
+  assert pg_temp.cnt('2026-11-02 20:00:00+00', b, 'habit') = 1, 'weekday habit reminds on Monday';
+  assert pg_temp.cnt('2026-11-01 20:00:00+00', b, 'habit') = 0, 'weekday habit must not remind on Sunday';
+end $$;
+
+-- The morning summary counts the same habits the arc does. Monday has both of B's
+-- habits due; Sunday has neither, and 07:00 local is 06:00Z in CET.
+do $$ declare b constant uuid := 'aaaaaaaa-0000-0000-0000-000000000002'; begin
+  assert pg_temp.cnt('2026-11-02 06:00:00+00', b, 'morning') = 1, 'summary on a day with habits due';
+  assert pg_temp.cnt('2026-11-01 06:00:00+00', b, 'morning') = 0, 'no summary when nothing is due';
 end $$;
 
 -- The cleanup job is callable by the server role, but not by clients.
