@@ -343,3 +343,136 @@ input[type="time"]::-webkit-date-and-time-value {
   margin: 0;
   min-height: 1.2em;
 }
+
+/* Nothing in the sky animates while nobody can see it (the battery rule in the sky design
+   doc). The layers stay mounted and get this class instead of being unmounted: a paused
+   animation resumes where it stopped, where a remount restarts every cycle at 0% - which on
+   the cloud track means teleporting it by up to a full group width on the most ordinary
+   action there is, leaving and returning to the app. Pausing is also cheaper than tearing
+   composited layers down and rebuilding them.
+   `!important` is required: every `animation:` shorthand below is a higher-specificity rule
+   that resets animation-play-state to `running`. */
+.sky-paused,
+.sky-paused * {
+  animation-play-state: paused !important;
+}
+
+/* Night sky twinkle: three groups on their own cycles, never per-star. Each group is an HTML
+   box with its own <svg> inside rather than an SVG <g>: WebKit does not layer-back a <g>, so
+   animating one repainted ~120 circles every frame on top of the hero's WebGL context. An
+   HTML box with `will-change: opacity` is composited and the repaint goes away. Opacity only. */
+@keyframes skyTwinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.sky-stars-group {
+  position: absolute;
+  inset: 0;
+  will-change: opacity;
+}
+.sky-twinkle-a { animation: skyTwinkle 6.5s ease-in-out infinite; }
+.sky-twinkle-b { animation: skyTwinkle 9s ease-in-out -3s infinite; }
+.sky-twinkle-c { animation: skyTwinkle 12s ease-in-out -7s infinite; }
+@media (prefers-reduced-motion: reduce) {
+  /* The stars stay visible; only the twinkle stops. */
+  .sky-stars-group { will-change: auto; }
+  .sky-twinkle-a, .sky-twinkle-b, .sky-twinkle-c { animation: none; }
+}
+
+/* Day sky light: a breathing glow and beams that grow out of the sun and dissolve.
+   Opacity and transform only. Each beam is visible for a small part of its cycle;
+   the stillness in between is the effect. */
+.sky-sun {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.sky-glow {
+  position: absolute;
+  left: -160px;
+  top: -160px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255,240,210,0.7), rgba(255,200,150,0.18) 45%, transparent 72%);
+  mix-blend-mode: screen;
+  animation: skyGlowBreathe 11s ease-in-out infinite;
+}
+.sky-beam {
+  position: absolute;
+  left: -450px;
+  top: -450px;
+  width: 900px;
+  height: 900px;
+  opacity: 0;
+  transform-origin: 50% 50%;
+  mix-blend-mode: screen;
+  -webkit-mask-image: radial-gradient(closest-side, rgba(0,0,0,0.95) 4%, rgba(0,0,0,0.55) 34%, transparent 68%);
+  mask-image: radial-gradient(closest-side, rgba(0,0,0,0.95) 4%, rgba(0,0,0,0.55) 34%, transparent 68%);
+}
+.sky-beam-a { background: conic-gradient(from 124deg at 50% 50%, transparent 0deg, rgba(255,238,206,0.30) 10deg, rgba(255,238,206,0.10) 19deg, transparent 32deg); }
+.sky-beam-b { background: conic-gradient(from 150deg at 50% 50%, transparent 0deg, rgba(255,230,192,0.24) 8deg, transparent 22deg); }
+.sky-beam-c { background: conic-gradient(from 100deg at 50% 50%, transparent 0deg, rgba(255,236,200,0.22) 7deg, transparent 20deg); }
+/* Morning: pass is 0-22% of a long cycle (23s -> ~5s lit, 31s -> ~7s lit) */
+.sky-morning .sky-beam-a { animation: skyReachSlow 23s ease-out infinite; }
+.sky-morning .sky-beam-b { animation: skyReachSlow 31s ease-out -13s infinite; }
+/* Afternoon: pass is 0-38% of shorter cycles, three overlapping */
+.sky-afternoon .sky-beam-a { animation: skyReachBrisk 13s ease-out infinite; }
+.sky-afternoon .sky-beam-b { animation: skyReachBrisk 17s ease-out -6s infinite; }
+.sky-afternoon .sky-beam-c { animation: skyReachBrisk 21s ease-out -11s infinite; }
+@keyframes skyGlowBreathe {
+  0%, 100% { transform: scale(1); opacity: 0.84; }
+  50% { transform: scale(1.09); opacity: 1; }
+}
+@keyframes skyReachSlow {
+  0% { opacity: 0; transform: scale(0.25); }
+  6% { opacity: 0.95; }
+  22% { opacity: 0; transform: scale(1.25); }
+  100% { opacity: 0; transform: scale(1.25); }
+}
+@keyframes skyReachBrisk {
+  0% { opacity: 0; transform: scale(0.25); }
+  8% { opacity: 0.95; }
+  38% { opacity: 0; transform: scale(1.25); }
+  100% { opacity: 0; transform: scale(1.25); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sky-glow, .sky-morning .sky-beam, .sky-afternoon .sky-beam { animation: none; }
+}
+
+/* Afternoon clouds: minimal drift. The track is exactly two identical groups wide
+   (`width: max-content` over two `flex: none` children), so moving it by -50% is exactly one
+   group width and the wrap lands on an identical picture - whatever that width turns out to
+   be. A group is GROUP_W (440px, about panel width) or the viewport if that is wider, so a
+   landscape panel is never wider than the track can cover. 440px at the old 5px/s is 88s.
+   Transform only, and deliberately no `will-change`: a promoted 2 x 440 x 520 track at 3x DPR
+   is megabytes of backing store sitting next to the hero's WebGL context, and iOS composites
+   a transform animation without the hint. */
+.sky-clouds-track {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: max-content;
+  display: flex;
+  animation: skyCloudDrift 88s linear infinite;
+}
+.sky-clouds-group {
+  position: relative;
+  flex: none;
+  min-width: 100vw;
+  height: 100%;
+}
+.sky-puff {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255,255,255,1), rgba(255,255,255,0.45) 55%, transparent 100%);
+}
+@keyframes skyCloudDrift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sky-clouds-track { animation: none; }
+}

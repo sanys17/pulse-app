@@ -1,9 +1,13 @@
 # Pulse: Handoff (current state)
 
-Last updated: 2026-10-09. Update this file at the end of any session that changes project state; it is imported into `CLAUDE.md`, so every session reads it first.
+Last updated: 2026-10-16. Update this file at the end of any session that changes project state; it is imported into `CLAUDE.md`, so every session reads it first.
 
 ## Status
-All on `master`, deployed on Vercel, `npm run build` passes. No test runner exists; nothing is verified except by build and manual device testing.
+Deployed on Vercel from `master`. `npm run build`, `npx tsc -b` and `npm test` (94 tests) all pass.
+
+**Active branch is `feat/sky-backgrounds`, 28 commits, branched off `home-redesign-v2`** (which is itself 3 commits ahead of `master` and carries the Oura-style progress arc). **The sky was verified on the iPhone by the user on 2026-10-16**, which cleared the branch's long-standing blocker, and it is now **open as PR #16** into `master`. Not merged.
+
+Corrections to earlier versions of this file, found 2026-10-15: the `home-redesign-v2` work *is* committed (it was described here as uncommitted), and PRs #8 and #15 are **merged**, not open. PRs #1-#15 are all closed or merged; #16 is the only open one.
 
 | Area | State |
 |---|---|
@@ -17,6 +21,96 @@ All on `master`, deployed on Vercel, `npm run build` passes. No test runner exis
 | Social tab redesign: needs-you requests, upcoming plans, friends' activity with one-tap cheers, owner deletes (feed entries with Undo; a plan's activity entry deletes the plan after a confirm), drag-to-dismiss sheets, 44px targets, tokens | Done, merged (PR #10). `008_feed_reactions.sql` run by the user. Not yet confirmed end to end on a device |
 | Open plans (any friend can join, max 20), Leave plan, @username under names, stale-fetch fix for deleted plans | On PR #15 (`style/nav-higher`). **Needs `012_open_plans.sql` run in the SQL Editor right before deploying.** It also tightens plan_members insert (the old policy let anyone add themselves to any plan). RLS, cap and join notification checked in a local PGlite replay only; not tested on a device |
 | **Push notifications** | **Live** (PR #13). Server sender via Supabase pg_cron every minute (heartbeat in Better Stack), custom service worker, Settings section. Verified: scheduler returns 200 and a test notification reaches the iPhone Home Screen app. Branch `feat/per-item-reminders` replaces global alert/time settings with per-event, per-plan and per-habit reminders (needs migration 011, run right before deploying it). Not yet confirmed one by one: habit, event, plan, invitation, friend request and morning notifications on a real device. Runbook: `docs/notifications-runbook.md` |
+
+## Animated sky backgrounds (`feat/sky-backgrounds`, 24 commits, not merged)
+
+Replaces the Home hero's mountain photograph with three time-of-day skies. Spec:
+`docs/superpowers/specs/2026-10-15-animated-sky-backgrounds-design.md`. Plan:
+`docs/superpowers/plans/2026-10-15-animated-sky-backgrounds.md`. Built task-by-task with a
+fresh reviewer per task plus a whole-branch review; every Critical and Important finding was
+fixed, deferred minors are listed in the plan's workspace under `.superpowers/sdd/` (gitignored).
+
+**What exists**
+- **Morning** and **afternoon** are real sky-only photographs (`morning_sky.webp`,
+  `afternoon_sky.webp`, 1290x1922, ~50 KB each). Each has a breathing sun glow and beams that
+  grow out of the sun and dissolve — morning sparse (23s/31s cycles), afternoon busier
+  (13s/17s/21s). Afternoon also has minimal CSS cloud drift, 5px/s on a 4-minute loop.
+- **Night has no photograph.** Its useful range is sRGB 9-49, so a photo of it is near-black
+  with grain. It is a CSS gradient (`NIGHT_SKY` in `Home.tsx`) sampled from a real night photo
+  in panel space, then scaled to 60%.
+- **Stars are real.** 904 naked-eye stars from the Yale Bright Star Catalogue (CDS V/50),
+  committed as `src/data/stars.ts`, projected for the observer's actual location — derived
+  from the browser timezone, no geolocation permission. Twinkle is three composited layers,
+  never per-star.
+- **Rare nights**: 12-14 a year at every latitude tested, either the Milky Way (a photograph,
+  `galaxy.webp`, screen-blended, fetched only on a galaxy night) or one planet (Venus, Mars,
+  Jupiter, Saturn — each an alpha-keyed disc inside its own coloured bloom). Never both.
+  Driven by a sidereal-drift ladder in `sky.ts`: no cross-night comparison, stable for a whole
+  night, so a refresh cannot spoil it.
+
+**Dev-only URL flags** (all `import.meta.env.DEV`-guarded, stripped from production)
+- `?sky=morning|afternoon|night` — force a phase without waiting out the clock.
+- `?rare=galaxy|planet|any` — scans forward for the next night that *genuinely* qualifies and
+  renders that whole sky. `?rare=all` lays all four planets out side by side.
+- `?hero=v2` — preview of an arc-led hero (percentage inside the arc, 0/100 scale, Next Up
+  directly beneath, no streak). An experiment, not a decision.
+
+**Assets**: only `.webp` files are committed. The multi-megabyte `.jpg` sources
+(`morning_final`, `afternoon_final`, `galaxy`, `venus`/`mars`/`jupiter`/`saturn`) are
+deliberately untracked. Consider adding `public/assets/*.jpg` to `.gitignore`.
+
+**Resolved on 2026-10-16, before opening PR #16**
+1. Device verification done by the user. This was the branch's blocker.
+2. The arc was rebuilt. Its fill used the surface tokens, which made the completed half about
+   13x *darker* than the empty half — progress erased the arc rather than filling it, and the
+   NeuroNoise shader was animating black against black. The fill is now the accent family
+   (`#D8E0F7`/`#8E9BC4`/`#6B78A0`, brightness 0.8) over a dark channel at
+   `rgba(7,7,12,0.5)` that keeps the arc identical on all three skies; the track dropped to
+   `rgba(142,155,196,0.2)`; `ARC_W` went 8 to 6; and the scale became `0`/`100` at the
+   endpoints, rotated to the tangent, with dots at 20/40/60/80 on one ring, all derived from
+   `ARC_R`/`ARC_W` instead of pinned in CSS.
+3. The dev auth bypass is reverted, `react-circular-progressbar` is gone, the three
+   superseded mountain photographs are deleted, and `public/assets/*.jpg` is gitignored.
+
+**Still outstanding**
+1. **"Best: N days" fails contrast over the afternoon sky**: 4.0:1 against 4.5:1 needed. It is
+   `rgba(255,255,255,0.75)`, and translucent text composites with the sky behind it. The
+   progress-arc work below deletes this line entirely, so it is only worth fixing if that work
+   slips.
+2. **The hero layout question is settled but not implemented.** `?hero=v2` and the current
+   hero are both superseded by the progress-arc spec; the flag and both branches are still in
+   `Home.tsx`.
+3. Nine tracked assets in `public/assets` are referenced nowhere:
+   `afternoon.webp`, `morning.webp`, `night.webp`, `arc-fill.svg`, `arc-track.svg`,
+   `glow-ellipse.svg`, `fab-plus.svg`, `nav-left.svg`, `nav-social.svg`. Left in place
+   deliberately — deleting them was outside what was asked.
+
+## What the progress arc measures (spec and plan, nothing built)
+
+Spec: `docs/superpowers/specs/2026-10-16-progress-arc-design.md`. Plan:
+`docs/superpowers/plans/2026-10-16-progress-arc.md`. Both committed on `feat/sky-backgrounds`;
+no code is implemented.
+
+The arc currently measures habits only, which was an implementation default rather than a
+decision. It should measure **how much of today's plan is done**: habits due today plus tasks
+dated today or earlier and still open. Decided with the user:
+
+- Overdue tasks roll forward; missed habits do not. 100% is unreachable while anything is
+  overdue, deliberately.
+- Undated tasks are a backlog and never affect the arc.
+- No per-item weighting. Grouping is the user's lever instead.
+- The printed percentage goes (the gauge scale already carries the value) and so does the
+  streak, returning later with gamification. **Next Up stays.**
+- Inside the dome: one line stating what is left, informational rather than congratulatory.
+  A user-authored name may appear only at the start of a line or after a colon, is never
+  transformed, and is capped at 20 characters — the rule that keeps it safe in Czech.
+- Supplements are habits that need a cadence: every day / 2 days / 3 days / certain weekdays,
+  with a user-chosen start date. This also resolves the Monday hardcode for weekly habits.
+
+Needs migration `013` (a date and `completed_at` on tasks, cadence columns on habits) and
+touches `pending_notifications`. **The app is also meant to support Czech, and has no i18n
+layer whatsoever** — no library, no locale files. That is a project in its own right and
+nothing else in this file mentions it.
 
 ## Supabase (user runs SQL manually in the SQL Editor)
 Applied (evidenced by plans working in the app): `001_initial_schema.sql`, `003_social.sql`, `004_fix_plan_policies.sql`., `005_friend_profile_visibility.sql` (run by the user, 2026-10-09). `006_friendships_realtime.sql` and `007_social_realtime.sql` (run by the user, 2026-10-09; verified working with two accounts), `008_feed_reactions.sql` (run by the user). Not confirmed from the repo: whether Google OAuth is configured in Supabase and whether `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set in Vercel (the app throws on startup without them). Ask the user if sign-in or a deploy misbehaves.
@@ -41,14 +135,27 @@ Better Stack error tracking (US region; EU needs a paid plan), app `Pulse-web`. 
 6. Migration (`src/lib/migrate.ts`): completions insert is not deduplicated (a duplicate fails the whole batch); habit ID mapping relies on insert-return order.
 7. `toggleCompletion` and `toggleTask` assign a variable inside a `setState` updater; works today but fragile. Prefer a ref.
 8. Settings shows Google Calendar and Ultrahuman as "Coming Soon" (cloud session change).
+9. **`tests/` is in no tsconfig `include`**, so `npx tsc -b` does not type-check test files. Pre-existing, project-wide.
+10. `skyPhase` and `SKY_BOUNDARY_HOURS` both encode 5/11/18; `skyPhase` now derives from the shared table, but nothing asserts they agree.
 
 ## Next steps (suggested order)
-1. Live updates for own-data tables (habits, completions, tasks, calendar events) with an echo guard.
-2. Design cleanup: tokens for accent/status colors, one glass recipe, contrast fixes.
-3. Finish verifying push notifications on a real iPhone: habit, event (two alerts), plan, invitation, friend request, morning summary (runbook section 7).
-4. Add error surfacing to hooks (issue 3).
+1. **Review and merge PR #16.** The branch's blocker is cleared and the tree is clean.
+2. **Build the progress arc's meaning**, off `master`, following
+   `docs/superpowers/plans/2026-10-16-progress-arc.md`. The plan's own advice is to take it in
+   two halves: tasks 2, 5, 6, 7, 8 give the arc its new meaning; tasks 1, 3, 4, 9 add the habit
+   cadence and are about 45% of the work and most of the risk. Run `011` and `012` in the SQL
+   Editor first — per this file they have never been applied — then `013`.
+   The standing hazard in this project is unverified work piling up unmerged, so merge each
+   half before starting the next.
+3. Live updates for own-data tables (habits, completions, tasks, calendar events) with an echo
+   guard.
+4. Design cleanup: tokens for accent/status colors, one glass recipe, contrast fixes.
+5. Finish verifying push notifications on a real iPhone: habit, event (two alerts), plan,
+   invitation, friend request, morning summary (runbook section 7).
+6. Add error surfacing to hooks (issue 3).
+7. Decide when Czech happens. It needs an i18n layer that does not exist yet.
 
 ## Working with this repo
 - Tooling and rules live in `CLAUDE.md`; UI rules in `docs/design-system.md`. Git: branch, PR into `master`, do not push or merge without being asked.
 - A cloud Claude session also works on this repo. `git fetch` and check `gh pr list` before assuming local state is current.
-- Specs and plans: `docs/superpowers/specs/`, `docs/superpowers/plans/` (process: brainstorm, spec, plan, execute).
+- Specs and plans: `docs/superpowers/specs/`, `docs/superpowers/plans/` (process: brainstorm, spec, plan, execute). The `superpowers` plugin was installed 2026-10-15 (`obra/superpowers-marketplace`, user scope); before that these directories existed without the tooling that made them.

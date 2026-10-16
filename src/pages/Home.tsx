@@ -1,16 +1,54 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useLayoutEffect, useEffect, lazy, Suspense, Component } from "react";
+import type { ReactNode } from "react";
+import { NeuroNoise } from "@paper-design/shaders-react";
+import { animateSpring } from "../lib/spring";
 import { useNavigate } from "react-router-dom";
-import { Lightning, Moon, Footprints, Check, CalendarBlank } from "@phosphor-icons/react";
+import { CaretDown } from "@phosphor-icons/react";
+import { skyPhase, nextBoundary, type SkyPhase } from "../lib/timeOfDay";
+import { observerFromTimeZone, DEFAULT_OBSERVER, type Observer } from "../lib/observer";
+import SkyLight, { PROVISIONAL_SUN } from "../components/SkyLight";
+import SkyClouds from "../components/SkyClouds";
+import { useSkyActive } from "../hooks/useSkyActive";
+import { reportError } from "../lib/monitoring";
+import { useCalendarEventsContext } from "../context/CalendarEventsContext";
 import { useHabitsContext } from "../context/HabitsContext";
 import { useTasksContext } from "../context/TasksContext";
-import { useCalendarEventsContext } from "../context/CalendarEventsContext";
-import { useUltrahuman } from "../hooks/useUltrahuman";
 import { useGoogleCalendar, formatRelativeTime } from "../hooks/useGoogleCalendar";
-import { HabitIcon } from "../components/HabitIcon";
 import { HABIT_COLORS } from "../types";
-import type { Habit } from "../types";
+import type { Habit, HabitColor } from "../types";
+import type { CalendarEvent as LocalCalendarEvent } from "../hooks/useCalendarEvents";
+import { HabitIcon } from "../components/HabitIcon";
+import type { Task } from "../hooks/useTasks";
 
-function formatLocalEventRelativeTime(date: string, time: string): string {
+interface HomeProps {
+  onEditHabit: (habit: Habit) => void;
+}
+
+const EVENT_COLORS = ["#4A90D9", "#E05C5C", "#5CB85C", "#5CB85C", "#D9A04A", "#9B59B6"];
+
+function getEventColor(index: number): string {
+  return EVENT_COLORS[index % EVENT_COLORS.length];
+}
+
+function formatEventTime(dateTimeStr: string): string {
+  try {
+    const d = new Date(dateTimeStr);
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  } catch {
+    return "";
+  }
+}
+
+function formatLocalTime(time: string): string {
+  if (!time) return "";
+  try {
+    return new Date(`2000-01-01T${time}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  } catch {
+    return "";
+  }
+}
+
+function formatLocalRelativeTime(date: string, time: string): string {
   if (!time) return "";
   const eventDate = new Date(`${date}T${time}`);
   const now = new Date();
@@ -26,773 +64,1613 @@ function formatLocalEventRelativeTime(date: string, time: string): string {
   return `in ${hours}h ${mins}m`;
 }
 
-interface HomeProps {
-  onEditHabit: (habit: Habit) => void;
+interface NormalizedEvent {
+  id: string;
+  title: string;
+  time: string;
+  relativeTime: string;
+  sortKey: number;
 }
 
-function toDateKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
+function normalizeGcalEvent(event: { id: string; summary: string; start: { dateTime?: string; date?: string } }): NormalizedEvent {
+  const startStr = event.start.dateTime || event.start.date || "";
+  const sortKey = startStr ? new Date(startStr).getTime() : 0;
+  return {
+    id: `gcal-${event.id}`,
+    title: event.summary || "No title",
+    time: startStr ? formatEventTime(startStr) : "",
+    relativeTime: startStr ? formatRelativeTime(startStr) : "",
+    sortKey,
+  };
 }
 
-function getArcFillPath(percent: number): string {
-  if (percent <= 0) return "";
-  const p = Math.min(percent, 99.7);
-  const cx = 117.314;
-  const cy = 117.313;
-  const R = 117.313;
-  const r = 113.313;
-  const startAngle = Math.PI;
-  const sweepAngle = (p / 100) * Math.PI;
-  const endAngle = startAngle - sweepAngle;
-  const ox1 = cx + R * Math.cos(startAngle);
-  const oy1 = cy - R * Math.sin(startAngle);
-  const ox2 = cx + R * Math.cos(endAngle);
-  const oy2 = cy - R * Math.sin(endAngle);
-  const ix1 = cx + r * Math.cos(endAngle);
-  const iy1 = cy - r * Math.sin(endAngle);
-  const ix2 = cx + r * Math.cos(startAngle);
-  const iy2 = cy - r * Math.sin(startAngle);
-  const largeArc = sweepAngle > Math.PI ? 1 : 0;
-  return [
-    `M ${ox1.toFixed(3)} ${oy1.toFixed(3)}`,
-    `A ${R} ${R} 0 ${largeArc} 1 ${ox2.toFixed(3)} ${oy2.toFixed(3)}`,
-    `L ${ix1.toFixed(3)} ${iy1.toFixed(3)}`,
-    `A ${r} ${r} 0 ${largeArc} 0 ${ix2.toFixed(3)} ${iy2.toFixed(3)}`,
-    "Z",
-  ].join(" ");
+function normalizeLocalEvent(event: LocalCalendarEvent): NormalizedEvent {
+  const sortKey = event.time ? new Date(`${event.date}T${event.time}`).getTime() : 0;
+  return {
+    id: `local-${event.id}`,
+    title: event.title,
+    time: formatLocalTime(event.time),
+    relativeTime: formatLocalRelativeTime(event.date, event.time),
+    sortKey,
+  };
 }
 
-function PulseScoreArc({ score }: { score: number }) {
-  return (
-    <div style={{
-      position: "relative",
-      width: "100%",
-      height: 155,
-      display: "flex",
-      alignItems: "flex-start",
-      justifyContent: "center",
-      overflow: "visible",
-    }}>
-      <div style={{
-        position: "absolute",
-        top: 10,
-        left: "50%",
-        transform: "translateX(-50%)",
-        width: 234.628,
-        height: 118,
-      }}>
-        <img
-          alt=""
-          src="/assets/arc-track.svg"
-          style={{ position: "absolute", inset: 0, display: "block", width: "100%", height: "100%", maxWidth: "none" }}
-        />
-      </div>
+function makeFakeEvents(): NormalizedEvent[] {
+  const now = new Date();
+  const t = (h: number, m: number) => {
+    const d = new Date(now);
+    d.setHours(h, m, 0, 0);
+    return d;
+  };
+  const fmt = (d: Date) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const rel = (d: Date) => {
+    const diffMin = Math.round((d.getTime() - now.getTime()) / 60000);
+    if (diffMin < 0) return `${Math.abs(diffMin)} min ago`;
+    if (diffMin === 0) return "now";
+    if (diffMin < 60) return `in ${diffMin} min`;
+    const hours = Math.floor(diffMin / 60);
+    const mins = diffMin % 60;
+    if (mins === 0) return `in ${hours}h`;
+    return `in ${hours}h ${mins}m`;
+  };
 
-      {score > 0 && (
-        <div style={{
-          position: "absolute",
-          top: 10,
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: 234.628,
-          height: 118,
-        }}>
-          <svg
-            width="233.641"
-            height="118"
-            viewBox="0 0 234.628 118"
-            fill="none"
-            style={{ display: "block", width: "100%", height: "100%" }}
-          >
-            <defs>
-              <linearGradient id="arcFillGrad" x1="234" y1="100" x2="0" y2="118" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#846EE9" />
-                <stop offset="1" stopColor="#0B0B1F" />
-              </linearGradient>
-            </defs>
-            <path d={getArcFillPath(score)} fill="url(#arcFillGrad)" />
-          </svg>
-        </div>
-      )}
+  const events = [
+    { h: now.getHours(), m: now.getMinutes() + 30, title: "Padel with Michael" },
+    { h: 18, m: 30, title: "Dinner with Monika" },
+    { h: 9, m: 0, title: "Doctor's at Parkville Ave" },
+    { h: 11, m: 30, title: "Meeting with Marc" },
+    { h: 13, m: 30, title: "Meeting with Clients" },
+    { h: 15, m: 0, title: "Design Review" },
+    { h: 17, m: 0, title: "Pick up groceries" },
+  ];
 
-      <p style={{
-        position: "absolute",
-        top: 54,
-        left: "50%",
-        transform: "translateX(-50%)",
-        fontFamily: "Geist, Inter, system-ui, sans-serif",
-        fontWeight: 700,
-        fontSize: 64,
-        lineHeight: "normal",
-        color: "#EAECF4",
-        whiteSpace: "nowrap",
-        margin: 0,
-      }}>
-        {score}
-      </p>
-
-      <p style={{
-        position: "absolute",
-        top: 128,
-        left: "50%",
-        transform: "translateX(-50%)",
-        fontFamily: "Geist, Inter, system-ui, sans-serif",
-        fontWeight: 500,
-        fontSize: 16,
-        lineHeight: "normal",
-        color: "#EAECF4",
-        whiteSpace: "nowrap",
-        margin: 0,
-      }}>
-        Pulse Score
-      </p>
-    </div>
-  );
+  return events.map((e, i) => {
+    const d = t(e.h, e.m);
+    return {
+      id: `fake-${i}`,
+      title: e.title,
+      time: fmt(d),
+      relativeTime: rel(d),
+      sortKey: d.getTime(),
+    };
+  });
 }
 
-export function Home(_props: HomeProps) {
-  const navigate = useNavigate();
-  const { habits, completions, isCompleted, toggleCompletion, getStreak } =
-    useHabitsContext();
-  const { vitals, loading: vitalsLoading, refetch: refetchVitals } =
-    useUltrahuman();
-  const calendar = useGoogleCalendar();
-
-  const today = new Date();
-  const todayKey = toDateKey(today);
-  const [selectedDate, setSelectedDate] = useState(todayKey);
-
-  useEffect(() => {
-    refetchVitals(selectedDate);
-  }, [selectedDate, refetchVitals]);
-
-  const dateStrip = useMemo(() => {
-    const days: {
-      dateKey: string;
-      label: string;
-      todayLabel: string;
-      isToday: boolean;
-    }[] = [];
-    for (let i = -7; i <= 7; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      const key = toDateKey(d);
-      days.push({
-        dateKey: key,
-        label: String(d.getDate()),
-        todayLabel: `Today ${d.toLocaleDateString("en-US", { month: "short" })} ${d.getDate()}`,
-        isToday: key === todayKey,
-      });
-    }
-    return days;
-  }, [todayKey]);
-
-  const selectedDateObj = useMemo(
-    () => new Date(selectedDate + "T12:00:00"),
-    [selectedDate],
-  );
-  const isToday = selectedDate === todayKey;
-
-  const dayHabits = useMemo(() => {
-    const dayOfWeek = selectedDateObj.getDay();
-    return habits.filter((h) => {
-      if (h.frequency === "daily") return true;
-      return dayOfWeek === 1;
-    });
-  }, [habits, selectedDateObj]);
-
-  const hasHiddenWeekly = useMemo(() => {
-    const dayOfWeek = selectedDateObj.getDay();
-    return dayOfWeek !== 1 && habits.some((h) => h.frequency === "weekly");
-  }, [habits, selectedDateObj]);
-
-  const dayProgress = useMemo(() => {
-    if (dayHabits.length === 0) return { done: 0, total: 0 };
-    const done = dayHabits.filter((h) =>
-      completions.some((c) => c.habitId === h.id && c.date === selectedDate),
-    ).length;
-    return { done, total: dayHabits.length };
-  }, [dayHabits, completions, selectedDate]);
-
-  const progressPercent =
-    dayProgress.total > 0
-      ? Math.round((dayProgress.done / dayProgress.total) * 100)
-      : 0;
-
-  const allCompletedDates = useMemo(() => {
-    const dateSet = new Set<string>();
-    const dateHabitCount = new Map<string, number>();
-    const dateDoneCount = new Map<string, number>();
-    for (const h of habits) {
-      for (let i = -7; i <= 7; i++) {
-        const d = new Date(today);
-        d.setDate(today.getDate() + i);
-        const key = toDateKey(d);
-        const dow = d.getDay();
-        if (h.frequency === "daily" || dow === 1) {
-          dateHabitCount.set(key, (dateHabitCount.get(key) || 0) + 1);
-        }
-      }
-    }
-    for (const c of completions) {
-      dateDoneCount.set(c.date, (dateDoneCount.get(c.date) || 0) + 1);
-    }
-    for (const [key, total] of dateHabitCount) {
-      const done = dateDoneCount.get(key) || 0;
-      if (done >= total && total > 0) dateSet.add(key);
-    }
-    return dateSet;
-  }, [habits, completions, todayKey]);
-
-  const nextHabits = useMemo(
-    () => dayHabits.filter((h) => !isCompleted(h.id, selectedDate)).slice(0, 2),
-    [dayHabits, isCompleted, selectedDate],
-  );
-
-  const { events: allCalendarEvents } = useCalendarEventsContext();
-  const selectedLocalEvents = useMemo(
-    () => allCalendarEvents.filter((e) => e.date === selectedDate),
-    [allCalendarEvents, selectedDate],
-  );
-
-  const { tasks, toggleTask } = useTasksContext();
-
-  const geist = "Geist, Inter, system-ui, sans-serif";
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, overflow: "visible", position: "relative" }}>
-      {/* Fixed glow — stays locked behind content */}
-      <div style={{
-        position: "fixed",
-        top: -100,
-        left: "50%",
-        transform: "translateX(-50%)",
-        width: 302,
-        height: 302,
-        pointerEvents: "none",
-        zIndex: 0,
-      }}>
-        <div style={{ position: "absolute", inset: "-32.95%" }}>
-          <img
-            alt=""
-            src="/assets/glow-ellipse.svg"
-            style={{ display: "block", width: "100%", height: "100%", maxWidth: "none" }}
-          />
-        </div>
-      </div>
-
-      {/* Profile avatar — Figma: 32×32 circle, border 1px #8E9BC4, top-right */}
-      <div
-        onClick={() => navigate("/settings")}
-        style={{
-          position: "absolute",
-          top: -4,
-          right: 0,
-          width: 32,
-          height: 32,
-          borderRadius: 100,
-          border: "1px solid #8E9BC4",
-          overflow: "hidden",
-          cursor: "pointer",
-          zIndex: 10,
-        }}
-      >
-        <img
-          src="/assets/profile-avatar.png"
-          alt="Profile"
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
-      </div>
-
-      <PulseScoreArc score={progressPercent} />
-
-      {/* Backdrop — gradually covers the fixed glow as user scrolls */}
-      <div style={{
-        background: "linear-gradient(to bottom, transparent 0%, #07070C 40px)",
-        margin: "0 -16px",
-        padding: "0 16px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 20,
-      }}>
-
-      <DateStrip
-        days={dateStrip}
-        selectedDate={selectedDate}
-        onSelect={setSelectedDate}
-        completedDates={allCompletedDates}
-      />
-
-      {!isToday && (
-        <p style={{
-          fontSize: 13,
-          color: "var(--color-text-secondary)",
-          textAlign: "center",
-          margin: "-8px 0",
-        }}>
-          {selectedDateObj.toLocaleDateString("en-US", {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-          })}
-        </p>
-      )}
-
-      {/* Vitals pills — Figma: compact row, bg rgba(28,28,42,0.2), rounded-full, gap 16 */}
-      {!vitalsLoading && vitals && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
-          {vitals.recovery && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 12px", background: "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12) 0%, transparent 50%), rgba(98,104,128,0.20)", borderRadius: 100,
-              backdropFilter: "blur(4px) saturate(120%)",
-              WebkitBackdropFilter: "blur(4px) saturate(120%)",
-              border: "1px solid rgba(255,255,255,0.10)",
-              boxShadow: "inset 1px 1px 3px 0 rgba(255,255,255,0.10)",
-            }}>
-              <Lightning size={14} weight="fill" color="white" />
-              <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
-                {vitals.recovery.score}
-              </span>
-            </div>
-          )}
-          {vitals.sleep && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 12px", background: "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12) 0%, transparent 50%), rgba(98,104,128,0.20)", borderRadius: 100,
-              backdropFilter: "blur(4px) saturate(120%)",
-              WebkitBackdropFilter: "blur(4px) saturate(120%)",
-              border: "1px solid rgba(255,255,255,0.10)",
-              boxShadow: "inset 1px 1px 3px 0 rgba(255,255,255,0.10)",
-            }}>
-              <Moon size={13} weight="fill" color="white" />
-              <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
-                {Math.floor(vitals.sleep.totalMinutes / 60)}h {vitals.sleep.totalMinutes % 60}m
-              </span>
-            </div>
-          )}
-          {vitals.steps && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 12px", background: "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12) 0%, transparent 50%), rgba(98,104,128,0.20)", borderRadius: 100,
-              backdropFilter: "blur(4px) saturate(120%)",
-              WebkitBackdropFilter: "blur(4px) saturate(120%)",
-              border: "1px solid rgba(255,255,255,0.10)",
-              boxShadow: "inset 1px 1px 3px 0 rgba(255,255,255,0.10)",
-            }}>
-              <Footprints size={14} weight="fill" color="white" />
-              <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
-                {vitals.steps.total >= 1000 ? `${(vitals.steps.total / 1000).toFixed(1)}k` : vitals.steps.total}
-              </span>
-            </div>
-          )}
-          {!vitals.steps && vitals.hrv && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "6px 12px", background: "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12) 0%, transparent 50%), rgba(98,104,128,0.20)", borderRadius: 100,
-              backdropFilter: "blur(4px) saturate(120%)",
-              WebkitBackdropFilter: "blur(4px) saturate(120%)",
-              border: "1px solid rgba(255,255,255,0.10)",
-              boxShadow: "inset 1px 1px 3px 0 rgba(255,255,255,0.10)",
-            }}>
-              <Footprints size={14} weight="fill" color="white" />
-              <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 13, color: "white" }}>
-                {vitals.hrv.avg}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Next Up — Figma: Geist Bold 18px header + dark card (rgba(28,28,42,0.65), rx=20) */}
-      <section style={{ marginTop: 8 }}>
-        <h2 style={{
-          fontFamily: geist, fontWeight: 700, fontSize: 18,
-          color: "#EAECF4", margin: "0 0 12px 0",
-        }}>
-          Next Up
-        </h2>
-        <div style={{
-          background: "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12) 0%, transparent 50%), rgba(98,104,128,0.20)",
-          backdropFilter: "blur(4px) saturate(120%)",
-          WebkitBackdropFilter: "blur(4px) saturate(120%)",
-          border: "1px solid rgba(255,255,255,0.10)",
-          boxShadow: "inset 1px 1px 3px 0 rgba(255,255,255,0.10)",
-          borderRadius: 20,
-          padding: "16px 15px",
-        }}>
-          {(() => {
-            const gcalItems = calendar.connected ? calendar.events.map((event) => {
-              const startStr = event.start.dateTime || event.start.date || "";
-              const isAllDay = !!event.start.date && !event.start.dateTime;
-              const timeLabel = !isAllDay && event.start.dateTime
-                ? new Date(event.start.dateTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-                : "";
-              return (
-                <div key={`gcal-${event.id}`} style={{
-                  display: "flex", alignItems: "flex-start", justifyContent: "space-between",
-                  padding: "5px 0",
-                }}>
-                  <div>
-                    <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "white" }}>
-                      {event.summary || "No title"}
-                    </span>
-                    {timeLabel && (
-                      <div style={{ fontFamily: geist, fontWeight: 400, fontSize: 14, color: "rgba(234,236,244,0.45)", marginTop: 2 }}>
-                        {timeLabel}
-                      </div>
-                    )}
-                  </div>
-                  <span style={{ fontFamily: geist, fontWeight: 300, fontSize: 14, color: "rgba(234,236,244,0.5)", flexShrink: 0, marginLeft: 12 }}>
-                    {startStr ? formatRelativeTime(startStr) : ""}
-                  </span>
-                </div>
-              );
-            }) : [];
-
-            const localItems = selectedLocalEvents.map((event) => {
-              const relTime = formatLocalEventRelativeTime(event.date, event.time);
-              const timeLabel = event.time
-                ? new Date(`2000-01-01T${event.time}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-                : "";
-              return (
-                <div key={`local-${event.id}`} style={{
-                  display: "flex", alignItems: "flex-start", justifyContent: "space-between",
-                  padding: "5px 0",
-                }}>
-                  <div>
-                    <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "white" }}>
-                      {event.title}
-                    </span>
-                    {timeLabel && (
-                      <div style={{ fontFamily: geist, fontWeight: 400, fontSize: 14, color: "rgba(234,236,244,0.45)", marginTop: 2 }}>
-                        {timeLabel}
-                      </div>
-                    )}
-                  </div>
-                  {relTime && (
-                    <span style={{ fontFamily: geist, fontWeight: 300, fontSize: 14, color: "rgba(234,236,244,0.5)", flexShrink: 0, marginLeft: 12 }}>
-                      {relTime}
-                    </span>
-                  )}
-                </div>
-              );
-            });
-
-            const habitItems = nextHabits.map((habit) => (
-              <div key={`habit-${habit.id}`}
-                onClick={() => toggleCompletion(habit.id, selectedDate)}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  cursor: "pointer", padding: "5px 0",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <HabitIcon name={habit.icon} size={15} color="white" />
-                  <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "white" }}>
-                    {habit.name}
-                  </span>
-                </div>
-                <span style={{ fontFamily: geist, fontWeight: 300, fontSize: 14, color: "white" }}>
-                  {getStreak(habit.id) > 0 ? `${getStreak(habit.id)} day streak` : habit.frequency}
-                </span>
-              </div>
-            ));
-
-            const allItems = [...gcalItems, ...localItems, ...habitItems];
-
-            if (allItems.length > 0) {
-              return allItems.map((item, i) => (
-                <div key={item.key}>
-                  {i > 0 && (
-                    <div style={{ height: 1, background: "rgba(234,236,244,0.08)", margin: "10px 0" }} />
-                  )}
-                  {item}
-                </div>
-              ));
-            }
-
-            if (calendar.available && !calendar.connected) {
-              return (
-                <div
-                  onClick={calendar.connect}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    gap: 8, cursor: "pointer", padding: "8px 0",
-                  }}
-                >
-                  <CalendarBlank size={16} weight="regular" color="rgba(142,155,196,0.8)" />
-                  <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "rgba(142,155,196,0.8)" }}>
-                    Connect Calendar
-                  </span>
-                </div>
-              );
-            }
-
-            if (habits.length > 0) {
-              return (
-                <p style={{
-                  fontFamily: geist, fontWeight: 500, fontSize: 16,
-                  color: "rgba(234,236,244,0.5)", textAlign: "center", margin: 0, padding: "8px 0",
-                }}>
-                  All done for today
-                </p>
-              );
-            }
-
-            return (
-              <div
-                onClick={() => navigate("/habits")}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", padding: "8px 0",
-                }}
-              >
-                <span style={{ fontFamily: geist, fontWeight: 500, fontSize: 16, color: "rgba(234,236,244,0.5)" }}>
-                  Add your first habit
-                </span>
-              </div>
-            );
-          })()}
-        </div>
-      </section>
-
-      {/* Today's Tasks — Figma: Geist Bold 18px header + task list with 17×17 checkboxes */}
-      <section>
-        <h2 style={{
-          fontFamily: geist, fontWeight: 700, fontSize: 18,
-          color: "#EAECF4", margin: "0 0 16px 0",
-        }}>
-          Today's Tasks
-        </h2>
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {tasks.map((task, i) => (
-            <div key={task.id}>
-              <div
-                onClick={() => toggleTask(task.id)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 16,
-                  cursor: "pointer", padding: "8px 0",
-                }}
-              >
-                <div style={{
-                  width: 17, height: 17, flexShrink: 0,
-                  border: "1px solid #8E9BC4",
-                  background: task.done ? "#8E9BC4" : "transparent",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "all 200ms ease",
-                }}>
-                  {task.done && <Check size={11} weight="bold" color="#07070C" />}
-                </div>
-                <span style={{
-                  fontFamily: geist, fontWeight: 500, fontSize: 18, color: "white",
-                  textDecoration: task.done ? "line-through" : "none",
-                  opacity: task.done ? 0.5 : 1,
-                  transition: "all 200ms ease",
-                }}>
-                  {task.label}
-                </span>
-              </div>
-              {i < tasks.length - 1 && (
-                <div style={{ height: 1, background: "rgba(234,236,244,0.08)", width: 201 }} />
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Today's Habits — below fold, existing grid */}
-      {habits.length > 0 && dayHabits.length > 0 && (
-        <section>
-          <h2 style={{
-            fontFamily: geist, fontWeight: 700, fontSize: 18,
-            color: "#EAECF4", margin: "0 0 12px 0",
-          }}>
-            {isToday ? "Today's Habits" : "Habits"}
-          </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {dayHabits.map((habit) => {
-              const color = HABIT_COLORS[habit.color];
-              const completed = isCompleted(habit.id, selectedDate);
-              const streak = getStreak(habit.id);
-              return (
-                <div
-                  key={habit.id}
-                  onClick={() => toggleCompletion(habit.id, selectedDate)}
-                  style={{
-                    padding: 16,
-                    background: color.bg,
-                    borderRadius: 12,
-                    cursor: "pointer",
-                    position: "relative",
-                    minHeight: 100,
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                    opacity: completed ? 0.7 : 1,
-                    transition: "all 200ms ease",
-                  }}
-                >
-                  <div style={{
-                    position: "absolute",
-                    top: 12,
-                    right: 12,
-                    width: 24,
-                    height: 24,
-                    borderRadius: 6,
-                    border: completed ? `2px solid ${color.fill}` : `2px solid ${color.text}40`,
-                    background: completed ? color.fill : "transparent",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    transition: "all 250ms cubic-bezier(0.34, 1.56, 0.64, 1)",
-                  }}>
-                    {completed && <Check size={14} weight="bold" color="white" />}
-                  </div>
-                  <div style={{ marginBottom: 12 }}>
-                    <HabitIcon name={habit.icon} size={28} color={color.fill} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: color.text }}>{habit.name}</div>
-                    <div style={{ fontSize: 13, color: `${color.text}99`, marginTop: 2 }}>
-                      {streak > 0 ? `${streak} day streak` : habit.frequency}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {hasHiddenWeekly && (
-            <p style={{ fontSize: 13, color: "var(--color-text-secondary)", textAlign: "center", marginTop: 12 }}>
-              Weekly habits appear on Mondays
-            </p>
-          )}
-        </section>
-      )}
-
-      </div>{/* end opaque backdrop */}
-    </div>
-  );
+interface FakeHabit {
+  id: string;
+  name: string;
+  icon: string;
+  color: HabitColor;
+  completed: boolean;
+  streak: number;
 }
 
-function DateStrip({
-  days,
-  selectedDate,
-  onSelect,
-  completedDates,
+const FAKE_HABITS: FakeHabit[] = [
+  { id: "fh1", name: "Meditate", icon: "YinYang", color: "green", completed: true, streak: 12 },
+  { id: "fh2", name: "Read a Book", icon: "BookOpen", color: "blue", completed: false, streak: 10 },
+  { id: "fh3", name: "Exercise", icon: "Barbell", color: "red", completed: true, streak: 8 },
+  { id: "fh4", name: "Journal", icon: "Pencil", color: "purple", completed: false, streak: 5 },
+  { id: "fh5", name: "Drink Water", icon: "Drop", color: "blue", completed: true, streak: 21 },
+  { id: "fh6", name: "Walk 10k Steps", icon: "Footprints", color: "orange", completed: false, streak: 3 },
+];
+
+const FAKE_TASKS: Task[] = [
+  { id: "ft1", label: "Review App Design", done: false },
+  { id: "ft2", label: "Call Marc", done: false },
+  { id: "ft3", label: "Schedule a Meeting", done: false },
+];
+
+interface FakeSupplement {
+  id: string;
+  name: string;
+  dosage: string;
+  image: string;
+  taken: boolean;
+}
+
+const FAKE_SUPPLEMENTS: FakeSupplement[] = [
+  { id: "fs1", name: "Magnesium", dosage: "2 pills", image: "/assets/morning_shot.webp", taken: false },
+  { id: "fs2", name: "D3+K2", dosage: "1 pill", image: "/assets/morning_shot.webp", taken: false },
+  { id: "fs3", name: "Omega", dosage: "1 pill", image: "/assets/morning_shot.webp", taken: false },
+];
+
+const geist = "Geist, Inter, system-ui, sans-serif";
+
+// Progress arc: the top slice of a large circle. Endpoints sit at
+// (15,85) and (325,85), so the centre is 155 left of x=170 and well below
+// the box. The box height follows the stroke so thicker round caps still fit.
+const ARC_R = 198;
+const ARC_CX = 170;
+const ARC_HALF_CHORD = 155;
+const ARC_W = 6;
+const ARC_BASE_Y = 85;
+const ARC_BOX_W = 340;
+const ARC_BOX_H = Math.ceil(ARC_BASE_Y + ARC_W / 2 + 1);
+const ARC_CY = ARC_BASE_Y + Math.sqrt(ARC_R * ARC_R - ARC_HALF_CHORD * ARC_HALF_CHORD);
+const ARC_HALF = Math.acos(ARC_HALF_CHORD / ARC_R);
+// Gauge scale. Only the two ends are numbered; the values between them are dots. Spelling
+// out 20/40/60/80 would put five labels around a dial whose whole job is to be read at a
+// glance, and the dots carry the sense of scale on their own. Everything here is drawn in
+// the arc's own viewBox and derived from ARC_R/ARC_W, so the scale follows the arc if its
+// geometry changes — the old version was pinned in CSS and had to be re-tuned by hand.
+const SCALE_DOTS = [20, 40, 60, 80];
+const SCALE_DOT_R = 2.5;
+// One ring for the whole scale, dots and end numbers alike, outside the stroke so it never
+// competes with the score inside the dome. At +20 the top dots sit about 9px ABOVE the arc
+// box, which is what the overflow on the SVG below is for; ARC_BOX_H only ever covered the
+// stroke. Raising this further eats into the column's side margin — see the note there.
+const SCALE_RADIUS = ARC_R + ARC_W / 2 + 20;
+const SCALE_INK = "rgba(234,236,244,0.72)";
+
+const ARC_PATH = `M ${ARC_CX - ARC_HALF_CHORD},${ARC_BASE_Y} A ${ARC_R},${ARC_R} 0 0,1 ${ARC_CX + ARC_HALF_CHORD},${ARC_BASE_Y}`;
+// Vertical focal point of the hero photo. Lower values show more sky, which
+// drops the summit further down the panel. Tune this to seat the peak inside
+// the arc's hollow; it is the one number that controls the composition.
+// One source of truth: the CSS value and the sun-anchor crop maths below both derive
+// from the fraction, so the drawn crop and the computed crop can never disagree.
+const BG_FOCUS_FRACTION = 0.39;
+const BG_FOCUS_Y = `${BG_FOCUS_FRACTION * 100}%`;
+
+const ARC_A0 = Math.PI + ARC_HALF;
+const ARC_A1 = 2 * Math.PI - ARC_HALF;
+
+function arcAngle(progress: number): number {
+  return ARC_A0 + (ARC_A1 - ARC_A0) * (progress / 100);
+}
+
+// A point on a circle concentric with the arc: radius ARC_R is the stroke's centreline,
+// anything larger sits outside it.
+function arcPointAt(progress: number, radius: number): { x: number; y: number } {
+  const a = arcAngle(progress);
+  return { x: ARC_CX + radius * Math.cos(a), y: ARC_CY + radius * Math.sin(a) };
+}
+
+// Centre of the round cap at the leading edge of the fill.
+function arcTip(progress: number): { x: number; y: number } {
+  return arcPointAt(progress, ARC_R);
+}
+
+// Degrees to rotate a label so it lies along the arc's tangent. The tangent vector is
+// (-sin a, cos a); at the endpoints this is about +/-51.5 degrees, which is what gives the
+// end numbers their lean.
+function arcTangentDeg(progress: number): number {
+  const a = arcAngle(progress);
+  return (Math.atan2(Math.cos(a), -Math.sin(a)) * 180) / Math.PI;
+}
+
+// Closed ribbon outline of the filled part of the arc, with round caps at both
+// ends, in the SVG's own viewBox units. Used as the shader's clip path.
+function buildArcClip(progress: number): string {
+  const hw = ARC_W / 2;
+  const aP = arcAngle(Math.max(progress, 0.4));
+  const pts: string[] = [];
+  const add = (x: number, y: number) => pts.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+  const SEG = 80;
+  const CAP = 10;
+  for (let i = 0; i <= SEG; i++) {
+    const a = ARC_A0 + (aP - ARC_A0) * (i / SEG);
+    add(ARC_CX + (ARC_R + hw) * Math.cos(a), ARC_CY + (ARC_R + hw) * Math.sin(a));
+  }
+  for (let i = 1; i < CAP; i++) {
+    const phi = (i / CAP) * Math.PI;
+    const c = Math.cos(phi), s = Math.sin(phi);
+    add(
+      ARC_CX + ARC_R * Math.cos(aP) + hw * (Math.cos(aP) * c - Math.sin(aP) * s),
+      ARC_CY + ARC_R * Math.sin(aP) + hw * (Math.sin(aP) * c + Math.cos(aP) * s),
+    );
+  }
+  for (let i = SEG; i >= 0; i--) {
+    const a = ARC_A0 + (aP - ARC_A0) * (i / SEG);
+    add(ARC_CX + (ARC_R - hw) * Math.cos(a), ARC_CY + (ARC_R - hw) * Math.sin(a));
+  }
+  for (let i = 1; i < CAP; i++) {
+    const phi = (i / CAP) * Math.PI;
+    const c = Math.cos(phi), s = Math.sin(phi);
+    add(
+      ARC_CX + ARC_R * Math.cos(ARC_A0) - hw * (Math.cos(ARC_A0) * c - Math.sin(ARC_A0) * s),
+      ARC_CY + ARC_R * Math.sin(ARC_A0) - hw * (Math.sin(ARC_A0) * c + Math.cos(ARC_A0) * s),
+    );
+  }
+  return `M ${pts[0]} ${pts.slice(1).map((p) => `L ${p}`).join(" ")} Z`;
+}
+
+// ---------------------------------------------------------------------------
+// Sky background
+// ---------------------------------------------------------------------------
+
+// Height of the fixed hero panel. The sky fills it exactly; NightSky is laid out in these
+// raw pixels, so the panel cannot become `height: auto` without breaking the star projection.
+const PANEL_H = 520;
+
+// Both day skies are the real sky-only art (1290x1922), with their sun positions measured
+// out of the delivered files rather than guessed. Night has no photograph at all: its useful
+// tonal range is sRGB 9-49, so a photograph of it is near-black with grain — the panel's own
+// grain layer supplies the texture, and a gradient cannot band the way a WebP of a near-black
+// ramp does. null therefore means "paint NIGHT_SKY instead".
+//
+// KNOWN, NOT YET FIXED: over the afternoon sky the "Best: N days" line measures 4.0:1 at its
+// worst pixel against the 4.5:1 it needs. It is rgba(255,255,255,0.75), and translucent text
+// composites with the sky behind it, so it gains less contrast the brighter that sky is.
+// Making it solid #EAECF4 takes it to 4.8:1 without touching the scrim.
+const SKY_IMAGES: Record<SkyPhase, string | null> = {
+  morning: "/assets/morning_sky.webp",
+  afternoon: "/assets/afternoon_sky.webp",
+  night: null,
+};
+
+// Sampled from the night photograph in panel space (after its object-fit: cover crop), then
+// scaled to 60% brightness — the photograph read as too light once the stars were over it.
+// Hue and saturation are unchanged; every channel is multiplied by the same factor, so this
+// is one knob: raise it toward 1.0 to go back to the photograph's own levels.
+const NIGHT_SKY =
+  "linear-gradient(to bottom, #05040C 0%, #080611 12%, #0A0816 25%, #0C0C1D 38%, " +
+  "#0E0F22 50%, #101326 62%, #13162B 75%, #171C2D 88%, #1D202D 100%)";
+
+// Dev-only escape hatch: ?sky=morning|afternoon|night forces a phase, so all three skies can
+// be checked on a real device without waiting out the clock. Stripped from production builds
+// by the import.meta.env.DEV guard, so the live app always follows the actual time.
+// Dev-only: ?hero=v2 previews an alternative hero — the arc owns the screen with the day's
+// percentage inside it, Next Up moves directly underneath, and the streak demotes to a chip
+// beside the date. The point is to resolve the arc-versus-streak competition by weight rather
+// than by deleting either of them. Stripped from production builds.
+function useHeroV2(): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(window.location.search).get("hero") === "v2";
+}
+
+/** One short line under the percentage, earned rather than automatic. Deliberately not
+ *  personalised: Home has no profile hook, and adding one for a preview would be a new data
+ *  dependency. If the name is wanted, useProfile() is where it comes from. */
+function praiseFor(pct: number): string {
+  if (pct >= 100) return "Every habit done today";
+  if (pct >= 70) return "Almost there for today";
+  if (pct >= 30) return "Good start, keep going";
+  if (pct > 0) return "The first one is the hardest";
+  return "Nothing done yet today";
+}
+
+function currentSkyPhase(): SkyPhase {
+  if (import.meta.env.DEV) {
+    const forced = new URLSearchParams(window.location.search).get("sky");
+    if (forced === "morning" || forced === "afternoon" || forced === "night") return forced;
+  }
+  return skyPhase(new Date());
+}
+
+// Slow enough that crossing a boundary with the app open reads as the light changing rather
+// than as a glitch. Opening fresh after a boundary is instant: there is nothing to fade from.
+const CROSSFADE_MS = 6000;
+
+// The night sky pulls in astronomy-engine and a ~900-star catalogue. Two thirds of the day
+// never needs either, so it loads only when the night phase is actually on screen. The
+// Suspense fallback is `null`: nothing renders while the chunk arrives, so there is no flash.
+const NightSky = lazy(() => import("../components/NightSky"));
+
+/**
+ * Keeps a failed night sky local.
+ *
+ * `Suspense` covers the chunk *loading*; nothing covers it *failing*. The only other error
+ * boundary in the app is the root Sentry one in `src/main.tsx`, so without this a rejected
+ * `import("../components/NightSky")` would propagate all the way up and blank the whole app.
+ * That is not an exotic trigger for an installed PWA: a stale cached shell after a deploy, or
+ * simply being offline the first time the chunk is needed, is enough.
+ *
+ * Failing here degrades to "no stars tonight" — the photograph, the light layers, the grain,
+ * the scrim and every bit of hero content carry on untouched. That degradation is permanent
+ * for the life of the page: React caches a rejected `lazy` payload, so mounting the night
+ * phase again gives a fresh boundary that re-renders the same rejection without attempting
+ * another request. Only a reload retries the chunk.
+ *
+ * It catches a throw from inside NightSky's own render too, not just a failed import, hence
+ * the `night-sky-render` target. NightSky already reports its own recoverable failures.
+ */
+class NightSkyBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error) {
+    reportError(error, { area: "sky", target: "night-sky-render" });
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * Map a point measured on the photograph to the same point on the panel.
+ *
+ * `SkyLight` positions its anchor with `left: x%` / `top: y%` of the panel, but the contract
+ * for `sunX`/`sunY` is a position on the *photograph*. Those are not the same thing: the image
+ * is drawn with `object-fit: cover` and `object-position: center BG_FOCUS_Y`, so part of it is
+ * cropped away and a point 17% down the image is not 17% down the panel. This reproduces the
+ * CSS cover geometry exactly from the image's intrinsic size, so the sun anchor lands on the
+ * sun whatever aspect ratio the delivered art turns out to have.
+ *
+ * Returns the input unchanged if any dimension is still unknown, which only happens before the
+ * image has loaded — the caller does not render SkyLight until then.
+ */
+function imagePointToPanel(
+  point: { x: number; y: number },
+  panelW: number,
+  panelH: number,
+  imgW: number,
+  imgH: number
+): { x: number; y: number } {
+  if (!(panelW > 0 && panelH > 0 && imgW > 0 && imgH > 0)) return point;
+  const scale = Math.max(panelW / imgW, panelH / imgH);
+  const drawnW = imgW * scale;
+  const drawnH = imgH * scale;
+  // CSS object-position: offset = (container - drawn) * position fraction. Horizontal is
+  // `center`, i.e. 0.5; vertical is BG_FOCUS_FRACTION.
+  const offsetX = (panelW - drawnW) * 0.5;
+  const offsetY = (panelH - drawnH) * BG_FOCUS_FRACTION;
+  return {
+    x: (offsetX + point.x * drawnW) / panelW,
+    y: (offsetY + point.y * drawnH) / panelH,
+  };
+}
+
+type ImageSize = { w: number; h: number };
+
+/**
+ * One complete sky: the photograph with its own motion painted over it, in a single layer so
+ * a crossfade carries the light and the photo together. Back to front within the layer:
+ * photograph, motion (light or clouds), stars.
+ */
+function SkyLayer({
+  phase,
+  panelW,
+  observer,
+  active,
+  visible,
+  animated,
+  size,
+  onSize,
+  onLoadError,
 }: {
-  days: { dateKey: string; label: string; todayLabel: string; isToday: boolean }[];
-  selectedDate: string;
-  onSelect: (key: string) => void;
-  completedDates: Set<string>;
+  phase: SkyPhase;
+  panelW: number;
+  observer: Observer;
+  active: boolean;
+  /** Target opacity: the incoming layer starts hidden and fades in over the outgoing one. */
+  visible: boolean;
+  animated: boolean;
+  size: ImageSize | undefined;
+  onSize: (src: string, el: HTMLImageElement | null) => void;
+  onLoadError: (src: string) => void;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const selectedRef = useRef<HTMLButtonElement>(null);
-  const dragState = useRef({ isDown: false, startX: 0, scrollLeft: 0, moved: false });
-  const isFirstRender = useRef(true);
-
-  useEffect(() => {
-    const el = selectedRef.current;
-    if (!el) return;
-    el.scrollIntoView({ inline: "center", block: "nearest", behavior: isFirstRender.current ? "instant" : "smooth" });
-    isFirstRender.current = false;
-  }, [selectedDate]);
-
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    dragState.current = { isDown: true, startX: e.clientX, scrollLeft: el.scrollLeft, moved: false };
-  }, []);
-
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragState.current.isDown) return;
-    const dx = e.clientX - dragState.current.startX;
-    if (Math.abs(dx) > 3) dragState.current.moved = true;
-    scrollRef.current!.scrollLeft = dragState.current.scrollLeft - dx;
-  }, []);
-
-  const onPointerUp = useCallback(() => {
-    dragState.current.isDown = false;
-  }, []);
-
-  const handleClick = useCallback(
-    (key: string) => { if (!dragState.current.moved) onSelect(key); },
-    [onSelect],
-  );
+  const src = SKY_IMAGES[phase];
+  const day = phase === "night" ? null : phase;
+  // The sun anchor needs the photograph's intrinsic size to undo the cover crop, so if the
+  // image fails to load `size` never arrives, `sun` stays null and a day phase renders no sun
+  // glow or beams at all. That is deliberate: a glow anchored to a guessed position on a sky
+  // that is not there would be worse than no glow. The failed load is reported (onLoadError).
+  const sun =
+    day && size && panelW > 0
+      ? imagePointToPanel(PROVISIONAL_SUN[day], panelW, PANEL_H, size.w, size.h)
+      : null;
 
   return (
     <div
-      ref={scrollRef}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      aria-hidden="true"
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        overflowX: "auto",
-        margin: "0 -16px",
-        padding: "4px 16px",
-        scrollbarWidth: "none",
-        cursor: "grab",
-        userSelect: "none",
-        touchAction: "pan-x",
-        WebkitOverflowScrolling: "touch",
+        position: "absolute",
+        inset: 0,
+        opacity: visible ? 1 : 0,
+        transition: animated ? `opacity ${CROSSFADE_MS}ms linear` : undefined,
       }}
     >
-      {days.map((day) => {
-        const isSelected = day.dateKey === selectedDate;
-        const isDayCompleted = completedDates.has(day.dateKey) && !day.isToday && !isSelected;
+      {src === null ? (
+        <div style={{ position: "absolute", inset: 0, background: NIGHT_SKY }} />
+      ) : (
+        <img
+          src={src}
+          alt=""
+          // A cached image can already be complete before onLoad would fire, so read the
+          // intrinsic size from both places. The sun anchor needs it to undo the cover crop.
+          ref={(el) => {
+            if (el?.complete) onSize(src, el);
+          }}
+          onLoad={(e) => onSize(src, e.currentTarget)}
+          onError={() => onLoadError(src)}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: `center ${BG_FOCUS_Y}`,
+          }}
+        />
+      )}
+      {day && sun && <SkyLight phase={day} sunX={sun.x} sunY={sun.y} active={active} />}
+      {phase === "afternoon" && <SkyClouds active={active} />}
+      {phase === "night" && panelW > 0 && (
+        <NightSkyBoundary>
+          <Suspense fallback={null}>
+            <NightSky observer={observer} width={panelW} height={PANEL_H} active={active} />
+          </Suspense>
+        </NightSkyBoundary>
+      )}
+    </div>
+  );
+}
 
-        return (
-          <button
-            key={day.dateKey}
-            ref={isSelected ? selectedRef : undefined}
-            onClick={() => handleClick(day.dateKey)}
+const cardBase: React.CSSProperties = {
+  border: "0.3px solid rgba(142,155,196,0.24)",
+  borderRadius: 20,
+};
+
+const calendarCard: React.CSSProperties = {
+  ...cardBase,
+  background: "linear-gradient(180deg, rgba(107,0,0,0.15) 0%, rgba(7,7,12,0.22) 37.5%, rgba(7,7,12,0.3) 52%, rgba(7,7,12,0.22) 68.75%, rgba(107,0,0,0.15) 100%)",
+};
+
+const tasksCard: React.CSSProperties = {
+  ...cardBase,
+  background: "linear-gradient(180deg, rgba(0,0,107,0.25) 0%, rgba(7,7,12,0.47) 100%)",
+};
+
+const habitCard: React.CSSProperties = {
+  ...cardBase,
+  background: "rgba(28,28,42,0.47)",
+};
+
+export function Home(_props: HomeProps) {
+  const navigate = useNavigate();
+  const calendar = useGoogleCalendar();
+  const { events: localEvents } = useCalendarEventsContext();
+  const { todaysHabits, todaysProgress, completions, isCompleted, toggleCompletion, getStreak } = useHabitsContext();
+  const { tasks: realTasks, toggleTask } = useTasksContext();
+  const [activeTab, setActiveTab] = useState<"daily" | "social">("daily");
+  const [calendarExpanded, setCalendarExpanded] = useState(false);
+  const [fakeTaskState, setFakeTaskState] = useState<Record<string, boolean>>({});
+  const [fakeHabitState, setFakeHabitState] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(FAKE_HABITS.map((h) => [h.id, h.completed]))
+  );
+  const [fakeSupplementState, setFakeSupplementState] = useState<Record<string, boolean>>({});
+
+  const usingFakeHabits = todaysHabits.length === 0;
+  const usingFakeTasks = realTasks.length === 0;
+  const displayTasks = usingFakeTasks ? FAKE_TASKS : realTasks;
+
+  const dailyStreak = useMemo(() => {
+    if (todaysHabits.length === 0) return 0;
+    const today = new Date();
+    let streak = 0;
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const allDone = todaysHabits.every((h) =>
+        completions.some((c) => c.habitId === h.id && c.date === key)
+      );
+      if (allDone) {
+        streak++;
+      } else if (i === 0) {
+        continue;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }, [todaysHabits, completions]);
+
+  const bestDailyStreak = useMemo(() => {
+    if (todaysHabits.length === 0) return 0;
+    const today = new Date();
+    let best = 0;
+    let current = 0;
+    for (let i = 364; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const allDone = todaysHabits.every((h) =>
+        completions.some((c) => c.habitId === h.id && c.date === key)
+      );
+      if (allDone) {
+        current++;
+        if (current > best) best = current;
+      } else {
+        current = 0;
+      }
+    }
+    return best;
+  }, [todaysHabits, completions]);
+
+  const fakeHabitsDone = useMemo(() => Object.values(fakeHabitState).filter(Boolean).length, [fakeHabitState]);
+  const fakeHabitsTotal = FAKE_HABITS.length;
+
+  const heroV2 = useHeroV2();
+  const displayStreak = usingFakeHabits ? 12 : dailyStreak;
+  const displayBest = usingFakeHabits ? 14 : bestDailyStreak;
+  const displayDone = usingFakeHabits ? fakeHabitsDone : todaysProgress.done;
+  const displayTotal = usingFakeHabits ? fakeHabitsTotal : todaysProgress.total;
+  const progressPct = displayTotal > 0
+    ? Math.round((displayDone / displayTotal) * 100)
+    : 0;
+
+  const today = new Date();
+  const todayKey = today.toISOString().slice(0, 10);
+  const monthStr = today.toLocaleDateString("en-US", { month: "short" });
+  const dayNum = today.getDate();
+  const weekday = today.toLocaleDateString("en-US", { weekday: "long" });
+
+  // --- Sky background -------------------------------------------------------
+  const skyActive = useSkyActive();
+
+  // Approximate position from the browser's own timezone; no geolocation prompt, correct on
+  // first paint. `observerFromTimeZone` already falls back on an unknown zone, so the catch
+  // only covers an Intl call that throws outright.
+  const observer = useMemo<Observer>(() => {
+    try {
+      return observerFromTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    } catch (err) {
+      reportError(err, { area: "sky", target: "observer" });
+      return DEFAULT_OBSERVER;
+    }
+  }, []);
+
+  const [skyPhaseNow, setSkyPhaseNow] = useState<SkyPhase>(() => currentSkyPhase());
+  // The phase being faded out, or null when a single sky is on screen.
+  const [outgoingPhase, setOutgoingPhase] = useState<SkyPhase | null>(null);
+  // False only for the one paint that puts the incoming layer at opacity 0.
+  const [incomingShown, setIncomingShown] = useState(true);
+  // Read by the boundary timer, which must not re-arm itself on every phase change.
+  const skyPhaseRef = useRef(skyPhaseNow);
+  const [panelW, setPanelW] = useState(0);
+  const [skyImgSizes, setSkyImgSizes] = useState<Record<string, ImageSize>>({});
+  const panelEl = useRef<HTMLDivElement>(null);
+
+  const noteSkyImgSize = (src: string, el: HTMLImageElement | null) => {
+    const w = el?.naturalWidth ?? 0;
+    const h = el?.naturalHeight ?? 0;
+    if (w <= 0 || h <= 0) return;
+    setSkyImgSizes((prev) => (prev[src]?.w === w && prev[src]?.h === h ? prev : { ...prev, [src]: { w, h } }));
+  };
+
+  // A sky that will not load leaves the panel black, which is worth knowing about rather than
+  // staring at. Reported, not toasted: the background is decoration, not the user's task.
+  const noteSkyImgError = (src: string) => {
+    reportError(new Error(`sky image failed to load: ${src}`), { area: "sky", target: "image" });
+  };
+
+  // Whether the incoming photograph has decoded. The crossfade waits for it (see below), so it
+  // can never fade in an empty layer. A phase with no photograph (night paints a gradient) is
+  // ready immediately — there is nothing to decode.
+  const incomingSrc = SKY_IMAGES[skyPhaseNow];
+  const incomingLoaded = incomingSrc === null || skyImgSizes[incomingSrc] !== undefined;
+
+  // NightSky is laid out in raw pixels, so the panel's width has to be measured rather than
+  // assumed: it spans the viewport, not the 430px content column, and rotates with the device.
+  // Measured before the first paint so the sun anchor and the stars are never briefly wrong.
+  useLayoutEffect(() => {
+    const el = panelEl.current;
+    if (!el) return;
+    const measure = () => setPanelW(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const observerRO = new ResizeObserver(measure);
+    observerRO.observe(el);
+    return () => observerRO.disconnect();
+  }, []);
+
+  // Re-read the clock and start a crossfade if the phase has moved on. The phase lives in a
+  // ref as well as in state so this never has to be rebuilt, and so the boundary timer below
+  // does not re-arm itself every time the sky changes.
+  const applySkyPhase = useCallback(() => {
+    const next = currentSkyPhase();
+    if (next === skyPhaseRef.current) return;
+    const previous = skyPhaseRef.current;
+    skyPhaseRef.current = next;
+    setSkyPhaseNow(next);
+    if (prefersReducedMotion()) return; // cut straight to the new sky, no fade
+    setIncomingShown(false);
+    setOutgoingPhase(previous);
+  }, []);
+
+  // One timer per boundary rather than a poll. `nextBoundary` is always strictly in the
+  // future, including across a DST shift, so the delay can never be zero and thrash.
+  useEffect(() => {
+    let timer = 0;
+    const schedule = () => {
+      const now = new Date();
+      const delay = Math.max(1000, nextBoundary(now).getTime() - now.getTime());
+      timer = window.setTimeout(() => {
+        applySkyPhase();
+        schedule();
+      }, delay);
+    };
+    schedule();
+    return () => window.clearTimeout(timer);
+  }, [applySkyPhase]);
+
+  // An installed PWA has its timers frozen while it is in the background, so the boundary
+  // timer cannot be the only trigger: re-check the clock whenever the app becomes visible.
+  useEffect(() => {
+    if (skyActive) applySkyPhase();
+  }, [skyActive, applySkyPhase]);
+
+  // Drive the crossfade: paint the incoming layer hidden once, let CSS carry it in over the
+  // outgoing one (which stays fully opaque, so there is no dip in brightness mid-fade), then
+  // drop the outgoing layer. Keyed on `outgoingPhase` so flipping `incomingShown` does not
+  // cancel the teardown timer.
+  //
+  // The 50ms is just long enough for the browser to paint opacity 0 with the transition in
+  // place. Nothing starts until the incoming photograph has decoded: fading onto a layer that
+  // is not there yet would black the panel out and then pop the photo in. There is no timeout
+  // on that wait, because the alternative to waiting is exactly that blackout — the outgoing
+  // sky is already on screen and decoded, so holding it is strictly better. If the incoming
+  // asset never arrives the previous sky simply stays up (the failure is reported in
+  // noteSkyImgError) until the next reload.
+  useEffect(() => {
+    if (!outgoingPhase || !incomingLoaded) return;
+    const PAINT_MS = 50;
+    const start = window.setTimeout(() => setIncomingShown(true), PAINT_MS);
+    const end = window.setTimeout(() => setOutgoingPhase(null), PAINT_MS + CROSSFADE_MS + 100);
+    return () => {
+      window.clearTimeout(start);
+      window.clearTimeout(end);
+    };
+  }, [outgoingPhase, incomingLoaded]);
+
+  const arcIds = useMemo(() => {
+    const salt = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    return { clip: `arc-clip-${salt}`, glow: `arc-glow-${salt}` };
+  }, []);
+
+  const clipPathEl = useRef<SVGPathElement>(null);
+  const glowEl = useRef<SVGGElement>(null);
+  const glowHaloEl = useRef<SVGCircleElement>(null);
+  const glowCoreEl = useRef<SVGCircleElement>(null);
+  const shownPct = useRef(0);
+
+  // The gauge sweeps from empty to its value instead of snapping there. The
+  // spring writes straight to the DOM so a fill does not re-render the page.
+  useLayoutEffect(() => {
+    const paint = (pct: number) => {
+      shownPct.current = pct;
+      clipPathEl.current?.setAttribute("d", buildArcClip(pct));
+      const { x, y } = arcTip(pct);
+      glowHaloEl.current?.setAttribute("cx", String(x));
+      glowHaloEl.current?.setAttribute("cy", String(y));
+      glowCoreEl.current?.setAttribute("cx", String(x));
+      glowCoreEl.current?.setAttribute("cy", String(y));
+      // No leading edge to light up until there is some fill.
+      glowEl.current?.setAttribute("opacity", String(Math.min(pct / 4, 1)));
+    };
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      paint(progressPct);
+      return;
+    }
+    return animateSpring({
+      from: shownPct.current,
+      to: progressPct,
+      response: 0.55,
+      damping: 1,
+      onUpdate: paint,
+    });
+  }, [progressPct]);
+
+  const allEvents = useMemo(() => {
+    const gcalNormalized = calendar.connected
+      ? calendar.events.map(normalizeGcalEvent)
+      : [];
+    const localNormalized = localEvents
+      .filter((e) => e.date === todayKey)
+      .map(normalizeLocalEvent);
+    const merged = [...gcalNormalized, ...localNormalized];
+    if (merged.length === 0) return makeFakeEvents();
+    return merged.sort((a, b) => a.sortKey - b.sortKey);
+  }, [calendar.connected, calendar.events, localEvents, todayKey]);
+
+  const nextUpEvents = allEvents.slice(0, 2);
+  const calendarEvents = calendarExpanded ? allEvents : allEvents.slice(0, 3);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 32, overflow: "visible", position: "relative" }}>
+      {/* Fixed background sky — independent of content. Back to front: outgoing sky (only
+          during a crossfade), incoming sky, grain, bottom fade. The hero content sits above
+          it all at zIndex 2 and is untouched by the sky. */}
+      <div ref={panelEl} style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: PANEL_H,
+        pointerEvents: "none",
+        zIndex: 0,
+        borderRadius: "0 0 24px 24px",
+        overflow: "hidden",
+      }}>
+        {/* One array keyed by phase, outgoing first. React then matches the layer that was
+            already on screen by its key, so starting a crossfade does not remount it (and so
+            its photograph does not flash, nor its stars recompute). The outgoing layer keeps
+            animating until it is covered: killing its sun glow at t=0 would pop. */}
+        {([outgoingPhase, skyPhaseNow].filter((p): p is SkyPhase => p !== null)).map((p) => (
+          <SkyLayer
+            key={p}
+            phase={p}
+            panelW={panelW}
+            observer={observer}
+            active={skyActive}
+            visible={p === skyPhaseNow ? incomingShown : true}
+            animated={p === skyPhaseNow && outgoingPhase !== null}
+            size={(() => { const s = SKY_IMAGES[p]; return s === null ? undefined : skyImgSizes[s]; })()}
+            onSize={noteSkyImgSize}
+            onLoadError={noteSkyImgError}
+          />
+        ))}
+        {/* Static grain noise */}
+        <div style={{
+          position: "absolute",
+          inset: 0,
+          opacity: 0.1,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+          backgroundSize: "128px 128px",
+        }} />
+        {/* Bottom fade to canvas */}
+        <div style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 200,
+          background: "linear-gradient(to bottom, rgba(7,7,12,0) 0%, rgba(7,7,12,0.4) 40%, rgba(7,7,12,0.85) 70%, #07070C 100%)",
+        }} />
+      </div>
+
+      {/* Hero content — scrolls independently over the fixed background */}
+      <section style={{
+        position: "relative",
+        zIndex: 2,
+      }}>
+
+        {/* Header: Date + Avatar */}
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          position: "relative",
+          zIndex: 2,
+        }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{
+              fontFamily: geist,
+              fontWeight: 700,
+              fontSize: 20,
+              color: "#EAECF4",
+              letterSpacing: "-0.02em",
+            }}>
+              {monthStr} {dayNum}
+            </span>
+            <span style={{
+              fontFamily: geist,
+              fontWeight: 400,
+              fontSize: 20,
+              color: "rgba(234,236,244,0.45)",
+            }}>
+              {weekday}
+            </span>
+            <CaretDown size={16} weight="bold" color="rgba(234,236,244,0.4)" style={{ marginLeft: -2, alignSelf: "center" }} />
+          </div>
+
+          <div
+            onClick={() => navigate("/settings")}
             style={{
-              height: 40,
-              minWidth: day.isToday ? 118 : 40,
-              padding: day.isToday ? "0 12px" : "0",
-              borderRadius: 9999,
-              border: isDayCompleted ? "none" : "1px solid rgba(255,255,255,0.10)",
-              background: isSelected
-                ? day.isToday
-                  ? "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.18) 0%, transparent 50%), rgba(255,255,255,0.06)"
-                  : "radial-gradient(circle at 25% 20%, rgba(255,255,255,0.10) 0%, transparent 55%), rgba(18,18,28,0.84)"
-                : isDayCompleted
-                  ? "#FFFFFF"
-                  : "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.03) 0%, transparent 50%), rgba(0,0,0,0.4)",
-              backdropFilter: isDayCompleted ? "none" : isSelected ? "blur(15px) saturate(120%)" : "blur(4px) saturate(120%)",
-              WebkitBackdropFilter: isDayCompleted ? "none" : isSelected ? "blur(15px) saturate(120%)" : "blur(4px) saturate(120%)",
-              color: isSelected
-                ? "#EAECF4"
-                : isDayCompleted
-                  ? "#282828"
-                  : "#EAECF4",
-              fontSize: 14,
-              fontWeight: 500,
-              fontFamily: "Inter, system-ui, sans-serif",
-              lineHeight: 1.2,
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-              textAlign: "center",
+              width: 36,
+              height: 36,
+              borderRadius: 100,
+              border: "1px solid rgba(142,155,196,0.4)",
+              overflow: "hidden",
               cursor: "pointer",
-              boxShadow: isSelected
-                ? "inset 1px 1px 4px 0 rgba(255,255,255,0.12), 0px 2px 2px 0px rgba(0,0,0,0.1)"
-                : isDayCompleted
-                  ? "0px 2px 2px 0px rgba(0,0,0,0.1)"
-                  : "inset 1px 1px 3px 0 rgba(255,255,255,0.10), 0px 2px 1px rgba(0,0,0,0.1)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              position: "relative",
             }}
           >
-            {day.isToday ? day.todayLabel : day.label}
+            <img
+              src="/assets/profile-avatar.png"
+              alt="Profile"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          </div>
+        </div>
+
+        {/* Arc Progress + Streak */}
+        <div style={{
+          position: "relative",
+          zIndex: 2,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          paddingTop: 36,
+        }}>
+          {/* Radial scrim. Starts below the arc and carries the streak number and the rows
+              under it. The inner stop was 0.82 when the background was a busy mountain
+              photograph; an even sky needs far less help, so it is down to 0.55 while the
+              outer stops stay put. If the real afternoon sky turns out too bright for the
+              15-17px rows, make this value per-phase (heavier on afternoon only) rather than
+              raising it for all three — see "The scrim gets lighter" in
+              docs/superpowers/specs/2026-10-15-animated-sky-backgrounds-design.md. */}
+          <div style={{
+            position: "absolute",
+            top: 104,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 340,
+            height: 230,
+            // Light touch only. The hero text now carries its own contrast (see the colours
+            // below), so this settles the worst case rather than hiding the photograph.
+            background: "radial-gradient(ellipse at center, rgba(7,7,12,0.25) 0%, rgba(7,7,12,0.2) 45%, transparent 75%)",
+            pointerEvents: "none",
+            zIndex: -1,
+          }} />
+          <div style={{ width: ARC_BOX_W, position: "relative" }}>
+            {/* Clip path for the shader. userSpaceOnUse so its units are the
+                overlay's own CSS pixels, which match the viewBox 1:1.
+                Starts empty; the spring above fills it. */}
+            <svg aria-hidden width={0} height={0} style={{ position: "absolute" }}>
+              <defs>
+                <clipPath id={arcIds.clip} clipPathUnits="userSpaceOnUse">
+                  <path ref={clipPathEl} d={buildArcClip(0)} />
+                </clipPath>
+                <radialGradient id={arcIds.glow}>
+                  <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.5" />
+                  <stop offset="40%" stopColor="#D8E0F7" stopOpacity="0.22" />
+                  <stop offset="100%" stopColor="#8E9BC4" stopOpacity="0" />
+                </radialGradient>
+              </defs>
+            </svg>
+
+            {/* Fixed width, like the overlays: the shader's clip path is in
+                userSpaceOnUse units, so all three layers must stay 1:1. */}
+            <svg
+              viewBox={`0 0 ${ARC_BOX_W} ${ARC_BOX_H}`}
+              style={{
+                width: ARC_BOX_W,
+                height: ARC_BOX_H,
+                display: "block",
+                // The scale ring rises above the box at the top and past it at the sides.
+                overflow: "visible",
+              }}
+            >
+              {/* Channel — a dark substrate under the WHOLE arc, done part included.
+                  Without it the arc's colour is set by whichever sky is behind it: a
+                  translucent tint is the brightest thing on the night gradient and washes
+                  out over the afternoon sky, so the two halves drift apart per phase. The
+                  channel gives every phase the same footing, and doubles as the arc's own
+                  local scrim, which is what let the radial scrim above come down to 0.25. */}
+              <path
+                d={ARC_PATH}
+                fill="none"
+                stroke="rgba(7,7,12,0.5)"
+                strokeWidth={ARC_W}
+                strokeLinecap="round"
+              />
+              {/* Track — the not-done part of the arc. Was 0.5, which made the EMPTY half of
+                  the arc ~13x more luminous than the filled half: progress erased the arc
+                  instead of filling it. The not-done part is the recessive one, so this is
+                  only a hint of Moonstone over the channel — enough to read as a tinted
+                  groove rather than a dead grey one. */}
+              <path
+                d={ARC_PATH}
+                fill="none"
+                stroke="rgba(142,155,196,0.2)"
+                strokeWidth={ARC_W}
+                strokeLinecap="round"
+              />
+              {/* Gauge scale, outside the stroke. One shadow on the group rather than per
+                  mark: these sit straight on the sky, and the sky is a photograph. */}
+              <g style={{ filter: "drop-shadow(0 1px 3px rgba(7,7,12,0.7))" }}>
+                {SCALE_DOTS.map((v) => {
+                  const p = arcPointAt(v, SCALE_RADIUS);
+                  return <circle key={v} cx={p.x} cy={p.y} r={SCALE_DOT_R} fill={SCALE_INK} />;
+                })}
+                {[0, 100].map((v) => {
+                  const p = arcPointAt(v, SCALE_RADIUS);
+                  return (
+                    <text
+                      key={v}
+                      x={p.x}
+                      y={p.y}
+                      // dy rather than dominantBaseline: the baseline keywords have a
+                      // patchy history in iOS Safari, and this is the one browser that
+                      // has to be right.
+                      dy="0.35em"
+                      textAnchor="middle"
+                      transform={`rotate(${arcTangentDeg(v)} ${p.x} ${p.y})`}
+                      fill={SCALE_INK}
+                      style={{
+                        fontFamily: geist,
+                        fontSize: 12,
+                        fontWeight: 500,
+                        // Small text takes positive tracking, and these are small AND
+                        // rotated, which costs legibility on its own.
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      {v}
+                    </text>
+                  );
+                })}
+              </g>
+            </svg>
+
+            {/* Water shader, clipped to the done part of the arc */}
+            <div style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: ARC_BOX_W,
+              height: ARC_BOX_H,
+              clipPath: `url(#${arcIds.clip})`,
+              WebkitClipPath: `url(#${arcIds.clip})`,
+              pointerEvents: "none",
+            }}>
+              {/* The fill carries the achievement, so it is the bright layer. These used to
+                  be the surface tokens (#2A2A3C / #1C1C2A / #121220) — the colours of cards,
+                  not of a value indicator — which put the whole fill between luminance 0.025
+                  and 0.045 and made the water motion invisible at any brightness. They are
+                  now the accent family, and colorFront matches the leading-edge glow stop at
+                  arcIds.glow so the fill and the specular highlight read as one lit edge. */}
+              <NeuroNoise
+                width={ARC_BOX_W}
+                height={ARC_BOX_H}
+                colorFront="#D8E0F7"
+                colorMid="#8E9BC4"
+                colorBack="#6B78A0"
+                brightness={0.8}
+                contrast={0.5}
+                speed={0.9}
+                scale={0.8}
+              />
+            </div>
+
+            {/* Specular highlight travelling with the leading edge of the fill.
+                overflow visible so the halo can bloom past the box. */}
+            <svg
+              aria-hidden
+              viewBox={`0 0 ${ARC_BOX_W} ${ARC_BOX_H}`}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: ARC_BOX_W,
+                height: ARC_BOX_H,
+                overflow: "visible",
+                pointerEvents: "none",
+              }}
+            >
+              <g ref={glowEl} opacity={0}>
+                <circle ref={glowHaloEl} r={17} fill={`url(#${arcIds.glow})`} />
+                <circle ref={glowCoreEl} r={Math.max(ARC_W / 2 - 2.5, 1.5)} fill="#FFFFFF" opacity={0.75} />
+              </g>
+            </svg>
+
+            {/* Streak number — below the arc, so the summit can rise into the
+                hollow under the curve */}
+            {/* Negative margin lifts the number INTO the dome rather than stacking it below.
+                The arc's underside across the digits sits at about y=18.4, and the box is
+                89 tall, so marginTop must stay above about -66 or the number touches the
+                stroke. At -20 the number's top is at y=72, leaving ~54px of clearance.
+                Both figures derive from ARC_W, so a thinner stroke only adds clearance. */}
+            <div style={{
+              marginTop: heroV2 ? -46 : -20,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}>
+              <span style={{
+                fontFamily: geist,
+                fontWeight: 700,
+                fontSize: heroV2 ? 52 : 64,
+                color: "#EAECF4",
+                lineHeight: 1,
+                letterSpacing: "-0.02em",
+                textShadow: "0 2px 16px rgba(7,7,12,0.8)",
+              }}>
+                {heroV2 ? progressPct : displayStreak}
+                {heroV2 && <span style={{ fontSize: 24, fontWeight: 600 }}>%</span>}
+              </span>
+              {heroV2 && (
+                <span style={{
+                  fontFamily: geist,
+                  fontWeight: 500,
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.8)",
+                  marginTop: 7,
+                  textShadow: "0 1px 6px rgba(7,7,12,0.6)",
+                }}>
+                  {praiseFor(progressPct)}
+                </span>
+              )}
+            </div>
+          </div>
+          {!heroV2 && (
+          <span style={{
+            fontFamily: geist,
+            fontWeight: 600,
+            fontSize: 17,
+            color: "#EAECF4",
+            marginTop: 6,
+            textShadow: "0 1px 8px rgba(7,7,12,0.6)",
+          }}>
+            Day Streak
+          </span>
+          )}
+          {!heroV2 && (
+          <span style={{
+            fontFamily: geist,
+            fontWeight: 400,
+            fontSize: 13,
+            color: "rgba(255,255,255,0.75)",
+            marginTop: 3,
+            textShadow: "0 1px 6px rgba(7,7,12,0.6)",
+          }}>
+            Best: {displayBest} days
+          </span>
+          )}
+        </div>
+
+        {/* Next Up — inside the hero image */}
+        <div style={{
+          position: "relative",
+          zIndex: 2,
+          marginTop: 24,
+          padding: "12px 4px 0",
+        }}>
+          <h2 style={{
+            fontFamily: geist,
+            fontWeight: 700,
+            fontSize: 14,
+            color: "#EAECF4",
+            margin: "0 0 12px 0",
+          }}>
+            Next Up
+          </h2>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            {nextUpEvents.map((event, i) => (
+              <div key={event.id}>
+                {i > 0 && (
+                  <div style={{ height: 1, background: "rgba(234,236,244,0.06)", margin: "12px 0" }} />
+                )}
+                <div style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: 5,
+                      background: getEventColor(i),
+                      flexShrink: 0,
+                      marginTop: 5,
+                    }} />
+                    <div>
+                      <div style={{
+                        fontFamily: geist,
+                        fontWeight: 500,
+                        fontSize: 14,
+                        color: "white",
+                      }}>
+                        {event.title}
+                      </div>
+                      <div style={{
+                        fontFamily: "Geist Mono, monospace",
+                        fontWeight: 300,
+                        fontSize: 10,
+                        color: "rgba(255,255,255,0.46)",
+                        marginTop: 2,
+                      }}>
+                        {event.time}
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{
+                    fontFamily: "Geist Mono, monospace",
+                    fontWeight: 300,
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.7)",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                    marginTop: 2,
+                  }}>
+                    {event.relativeTime}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Daily / Social toggle */}
+      <div style={{
+        position: "relative",
+        zIndex: 2,
+        display: "flex",
+        justifyContent: "center",
+      }}>
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          background: "rgba(255,255,255,0.1)",
+          borderRadius: 20,
+          paddingLeft: 1,
+          paddingRight: 12,
+          paddingTop: 1,
+          paddingBottom: 1,
+        }}>
+          <button
+            onClick={() => setActiveTab("daily")}
+            style={{
+              fontFamily: geist,
+              fontWeight: 600,
+              fontSize: 15,
+              color: activeTab === "daily" ? "white" : "rgba(255,255,255,0.64)",
+              background: activeTab === "daily" ? "rgba(28,28,42,0.87)" : "transparent",
+              border: "none",
+              borderRadius: 16,
+              padding: "4px 16px",
+              cursor: "pointer",
+              transition: "background 200ms ease, color 200ms ease",
+            }}
+          >
+            Daily
           </button>
-        );
-      })}
+          <button
+            onClick={() => setActiveTab("social")}
+            style={{
+              fontFamily: geist,
+              fontWeight: 600,
+              fontSize: 15,
+              color: activeTab === "social" ? "white" : "rgba(255,255,255,0.64)",
+              background: activeTab === "social" ? "rgba(28,28,42,0.87)" : "transparent",
+              border: "none",
+              borderRadius: 16,
+              padding: "4px 16px",
+              cursor: "pointer",
+              transition: "background 200ms ease, color 200ms ease",
+            }}
+          >
+            Social
+          </button>
+        </div>
+      </div>
+
+      {/* Calendar section */}
+      <section style={{ position: "relative", zIndex: 2 }}>
+        <div style={{ ...calendarCard, padding: "20px 20px 12px" }}>
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 20,
+          }}>
+            <h2 style={{
+              fontFamily: geist,
+              fontWeight: 700,
+              fontSize: 14,
+              color: "#EAECF4",
+              margin: 0,
+            }}>
+              Calendar
+            </h2>
+            <span
+              onClick={() => navigate("/calendar")}
+              style={{
+                fontFamily: geist,
+                fontWeight: 400,
+                fontSize: 14,
+                color: "rgba(234,236,244,0.4)",
+                cursor: "pointer",
+              }}
+            >
+              See all
+            </span>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            {calendarEvents.map((event, i) => (
+              <div key={event.id}>
+                {i > 0 && (
+                  <div style={{ height: 1, background: "rgba(234,236,244,0.06)", margin: "14px 0" }} />
+                )}
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 4,
+                      background: getEventColor(i + 2),
+                      flexShrink: 0,
+                    }} />
+                    <span style={{
+                      fontFamily: geist,
+                      fontWeight: 600,
+                      fontSize: 16,
+                      color: "white",
+                    }}>
+                      {event.title}
+                    </span>
+                  </div>
+                  <span style={{
+                    fontFamily: "Geist Mono, monospace",
+                    fontWeight: 400,
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.69)",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}>
+                    {event.time}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Expand chevron */}
+          <div
+            onClick={allEvents.length > 3 ? () => setCalendarExpanded(!calendarExpanded) : undefined}
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              paddingTop: 12,
+              cursor: allEvents.length > 3 ? "pointer" : "default",
+            }}
+          >
+            <CaretDown
+              size={20}
+              weight="bold"
+              color={allEvents.length > 3 ? "rgba(234,236,244,0.3)" : "rgba(234,236,244,0.15)"}
+              style={{
+                transform: calendarExpanded ? "rotate(180deg)" : "none",
+                transition: "transform 200ms ease",
+              }}
+            />
+          </div>
+        </div>
+      </section>
+      {/* Tasks card */}
+      {displayTasks.length > 0 && (
+        <section style={{ position: "relative", zIndex: 2 }}>
+          <div style={{ ...tasksCard, padding: "20px 20px 16px" }}>
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 16,
+            }}>
+              <h2 style={{
+                fontFamily: geist,
+                fontWeight: 700,
+                fontSize: 14,
+                color: "#EAECF4",
+                margin: 0,
+              }}>
+                Tasks
+              </h2>
+              <span style={{
+                fontFamily: geist,
+                fontWeight: 400,
+                fontSize: 14,
+                color: "rgba(234,236,244,0.4)",
+              }}>
+                {displayTasks.filter((t) => usingFakeTasks ? (fakeTaskState[t.id] ?? t.done) : t.done).length} of {displayTasks.length}
+              </span>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              {displayTasks.map((task, i) => {
+                const isDone = usingFakeTasks ? (fakeTaskState[task.id] ?? task.done) : task.done;
+                return (
+                <div key={task.id}>
+                  {i > 0 && (
+                    <div style={{ height: 1, background: "rgba(234,236,244,0.06)", margin: "10px 0" }} />
+                  )}
+                  <div
+                    onClick={() => usingFakeTasks
+                      ? setFakeTaskState((prev) => ({ ...prev, [task.id]: !isDone }))
+                      : toggleTask(task.id)
+                    }
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      cursor: "pointer",
+                      minHeight: 36,
+                    }}
+                  >
+                    <div style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 6,
+                      border: isDone
+                        ? "2px solid #8E9BC4"
+                        : "2px solid rgba(234,236,244,0.2)",
+                      background: isDone ? "#8E9BC4" : "transparent",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                      transition: "all 200ms ease",
+                    }}>
+                      {isDone && (
+                        <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
+                          <path d="M1 5L4.5 8.5L11 1.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </div>
+                    <span style={{
+                      fontFamily: geist,
+                      fontWeight: 500,
+                      fontSize: 16,
+                      color: isDone ? "rgba(234,236,244,0.35)" : "#EAECF4",
+                      textDecoration: isDone ? "line-through" : "none",
+                      transition: "color 200ms ease",
+                    }}>
+                      {task.label}
+                    </span>
+                  </div>
+                </div>
+              );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Habits grid */}
+      <section style={{ position: "relative", zIndex: 2 }}>
+        <h2 style={{
+          fontFamily: geist,
+          fontWeight: 700,
+          fontSize: 14,
+          color: "#EAECF4",
+          margin: "0 0 16px 0",
+        }}>
+          Habits for Today
+        </h2>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 12,
+        }}>
+          {usingFakeHabits
+            ? FAKE_HABITS.map((fh) => {
+                const completed = fakeHabitState[fh.id] ?? fh.completed;
+                const colorSet = HABIT_COLORS[fh.color];
+                return (
+                  <div
+                    key={fh.id}
+                    style={{
+                      ...habitCard,
+                      padding: "14px 12px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{
+                        width: 33, height: 33, borderRadius: 10,
+                        background: colorSet.bg,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <HabitIcon name={fh.icon} size={20} color={colorSet.fill} />
+                      </div>
+                      <div
+                        onClick={() => setFakeHabitState((prev) => ({ ...prev, [fh.id]: !completed }))}
+                        style={{
+                          width: 24, height: 24, borderRadius: 6,
+                          border: completed ? `1px solid ${colorSet.fill}` : "1px solid #8E9BC4",
+                          background: completed ? colorSet.fill : "transparent",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          cursor: "pointer", transition: "background 200ms ease, border-color 200ms ease",
+                        }}
+                      >
+                        {completed && (
+                          <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
+                            <path d="M1 5L4.5 8.5L11 1.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: geist, fontWeight: 500, fontSize: 14, color: "#EAECF4", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {fh.name}
+                      </div>
+                      {fh.streak > 0 && (
+                        <div style={{ fontFamily: "Geist Mono, monospace", fontWeight: 400, fontSize: 8, color: "rgba(255,255,255,0.47)", marginTop: 2 }}>
+                          {fh.streak} day streak
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            : todaysHabits.map((habit) => {
+                const completed = isCompleted(habit.id);
+                const streak = getStreak(habit.id);
+                const colorSet = HABIT_COLORS[habit.color];
+                return (
+                  <div
+                    key={habit.id}
+                    style={{
+                      ...habitCard,
+                      padding: "14px 12px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{
+                        width: 33, height: 33, borderRadius: 10,
+                        background: colorSet.bg,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <HabitIcon name={habit.icon} size={20} color={colorSet.fill} />
+                      </div>
+                      <div
+                        onClick={() => toggleCompletion(habit.id)}
+                        style={{
+                          width: 24, height: 24, borderRadius: 6,
+                          border: completed ? `1px solid ${colorSet.fill}` : "1px solid #8E9BC4",
+                          background: completed ? colorSet.fill : "transparent",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          cursor: "pointer", transition: "background 200ms ease, border-color 200ms ease",
+                        }}
+                      >
+                        {completed && (
+                          <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
+                            <path d="M1 5L4.5 8.5L11 1.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: geist, fontWeight: 500, fontSize: 14, color: "#EAECF4", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {habit.name}
+                      </div>
+                      {streak > 0 && (
+                        <div style={{ fontFamily: "Geist Mono, monospace", fontWeight: 400, fontSize: 8, color: "rgba(255,255,255,0.47)", marginTop: 2 }}>
+                          {streak} day streak
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+          }
+        </div>
+      </section>
+
+      {/* Supplements section */}
+      <section style={{ position: "relative", zIndex: 2 }}>
+        <h2 style={{
+          fontFamily: geist,
+          fontWeight: 700,
+          fontSize: 14,
+          color: "#EAECF4",
+          margin: "0 0 16px 0",
+        }}>
+          Supplements
+        </h2>
+
+        <div style={{
+          display: "flex",
+          gap: 14,
+          overflowX: "auto",
+          paddingBottom: 4,
+          margin: "0 -16px",
+          padding: "0 16px",
+          WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",
+        }}>
+          {FAKE_SUPPLEMENTS.map((sup) => {
+            const taken = fakeSupplementState[sup.id] ?? sup.taken;
+            return (
+              <div
+                key={sup.id}
+                style={{
+                  position: "relative",
+                  width: 154,
+                  height: 155,
+                  borderRadius: 20,
+                  overflow: "hidden",
+                  flexShrink: 0,
+                }}
+              >
+                <img
+                  src={sup.image}
+                  alt={sup.name}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
+                />
+                <div style={{
+                  position: "absolute",
+                  inset: 0,
+                  boxShadow: "inset 0 163px 4px 0 rgba(0,0,0,0.63)",
+                  borderRadius: 20,
+                }} />
+                {/* Checkbox */}
+                <div
+                  onClick={() => setFakeSupplementState((prev) => ({ ...prev, [sup.id]: !taken }))}
+                  style={{
+                    position: "absolute",
+                    top: 12,
+                    right: 12,
+                    width: 23,
+                    height: 23,
+                    borderRadius: 4,
+                    border: "1px solid white",
+                    background: taken ? "#8E9BC4" : "transparent",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                  }}
+                >
+                  {taken && (
+                    <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
+                      <path d="M1 5L4.5 8.5L11 1.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+                {/* Label */}
+                <div style={{
+                  position: "absolute",
+                  bottom: 12,
+                  left: 12,
+                }}>
+                  <div style={{
+                    fontFamily: geist,
+                    fontWeight: 700,
+                    fontSize: 14,
+                    color: "#EAECF4",
+                  }}>
+                    {sup.name}
+                  </div>
+                  <div style={{
+                    fontFamily: "Geist Mono, monospace",
+                    fontWeight: 600,
+                    fontSize: 10,
+                    color: "rgba(234,236,244,0.71)",
+                    marginTop: 1,
+                  }}>
+                    {sup.dosage}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }
