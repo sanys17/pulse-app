@@ -3,11 +3,8 @@ import { supabase } from "../lib/supabase";
 import { expectRows } from "../lib/monitoring";
 import { useAuth } from "../context/AuthContext";
 import { cadenceFromRow, cadenceToRow, isDueOn } from "../lib/cadence";
+import { toDateKey } from "../lib/dateKey";
 import type { Habit, HabitInput, Completion, HabitColor } from "../types";
-
-function toDateKey(d: Date = new Date()): string {
-  return d.toISOString().slice(0, 10);
-}
 
 export function useHabits() {
   const { user } = useAuth();
