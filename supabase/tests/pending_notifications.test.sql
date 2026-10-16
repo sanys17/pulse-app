@@ -307,14 +307,14 @@ insert into public.plan_members (plan_id, user_id, rsvp, joined_at) values
 update public.plan_members set self_joined = true
   where plan_id = 'bbbbbbbb-0000-0000-0000-000000000001' and user_id = 'aaaaaaaa-0000-0000-0000-000000000003';
 
-do $ declare b constant uuid := 'aaaaaaaa-0000-0000-0000-000000000002'; begin
+do $$ declare b constant uuid := 'aaaaaaaa-0000-0000-0000-000000000002'; begin
   assert exists (
     select 1 from pg_proc
     where proname = 'pending_notifications_base' and pronamespace = 'public'::regnamespace
   ), '012 must still own pending_notifications as a wrapper over _base';
   assert pg_temp.cnt('2026-10-28 09:05:00+00', b, 'join') = 1, 'the plan creator is told when someone joins';
   assert pg_temp.cnt('2026-10-28 09:20:00+00', b, 'join') = 0, 'the join window expires after 15 minutes';
-end $;
+end $$;
 
 -- habit_due_on is the SQL mirror of isDueOn() in src/lib/cadence.ts. Nothing crosses
 -- that boundary at runtime, so these assertions are the only thing holding the two

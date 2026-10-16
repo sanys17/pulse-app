@@ -102,7 +102,7 @@ $$;
 -- wrapper that unions the base rules with the "someone joined your open plan" branch.
 -- Replacing the wrapper here would silently delete that branch and leave the orphaned
 -- base still carrying the old weekly-on-Monday rule.
-do $
+do $$
 begin
   if not exists (
     select 1 from pg_proc
@@ -110,7 +110,7 @@ begin
   ) then
     raise exception 'Run 012_open_plans.sql before this migration: pending_notifications_base does not exist yet.';
   end if;
-end $;
+end $$;
 
 -- The rest of the body is 011 verbatim; a function has to be replaced whole.
 create or replace function public.pending_notifications_base(p_now timestamptz default now())
