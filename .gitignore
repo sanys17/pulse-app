@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 .superpowers/
+
+# Multi-megabyte sky sources; only the exported .webp files are committed.
+public/assets/*.jpg

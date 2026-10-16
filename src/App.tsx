@@ -37,7 +37,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user && import.meta.env.PROD) return <SignIn />;
+  if (!user) return <SignIn />;
 
   return <>{children}</>;
 }
