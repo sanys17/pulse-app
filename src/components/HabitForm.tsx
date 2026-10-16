@@ -208,7 +208,10 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
                     key={opt.id}
                     type="button"
                     aria-pressed={active}
-                    onClick={() => setCadence(opt.make())}
+                    // Rebuilding an already-selected option would reset startDate to
+                    // today and flip an interval habit's parity. Tapping the current
+                    // choice is a no-op.
+                    onClick={() => { if (!active) setCadence(opt.make()); }}
                     style={{
                       height: 44,
                       borderRadius: "var(--radius-sm)",

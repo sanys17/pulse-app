@@ -291,6 +291,31 @@ do $$ begin
 end $$;
 
 -- ===== [F] cadence (migration 013) =====
+-- Section [D] deliberately corrupted B's timezone to prove one bad profile cannot stop
+-- the run, and never put it back. The u CTE filters on pg_timezone_names, so B is
+-- excluded from every result until this is restored — every assertion below would
+-- silently return 0.
+update public.profiles set timezone = 'Europe/Prague'
+  where user_id = 'aaaaaaaa-0000-0000-0000-000000000002';
+
+-- 012's wrapper must survive 013. Nothing asserted kind='join' before, which is exactly
+-- why 013 was able to replace the wrapper and delete this branch unnoticed.
+-- C joins one of B's open plans. The creator (B) must be told. This is 012's branch,
+-- and it only survives if 013 leaves the wrapper alone.
+insert into public.plan_members (plan_id, user_id, rsvp, joined_at) values
+  ('bbbbbbbb-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000003', 'going', '2026-10-28 09:00:00+00');
+update public.plan_members set self_joined = true
+  where plan_id = 'bbbbbbbb-0000-0000-0000-000000000001' and user_id = 'aaaaaaaa-0000-0000-0000-000000000003';
+
+do $ declare b constant uuid := 'aaaaaaaa-0000-0000-0000-000000000002'; begin
+  assert exists (
+    select 1 from pg_proc
+    where proname = 'pending_notifications_base' and pronamespace = 'public'::regnamespace
+  ), '012 must still own pending_notifications as a wrapper over _base';
+  assert pg_temp.cnt('2026-10-28 09:05:00+00', b, 'join') = 1, 'the plan creator is told when someone joins';
+  assert pg_temp.cnt('2026-10-28 09:20:00+00', b, 'join') = 0, 'the join window expires after 15 minutes';
+end $;
+
 -- habit_due_on is the SQL mirror of isDueOn() in src/lib/cadence.ts. Nothing crosses
 -- that boundary at runtime, so these assertions are the only thing holding the two
 -- implementations together.

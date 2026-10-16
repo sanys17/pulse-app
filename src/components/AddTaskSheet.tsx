@@ -19,8 +19,10 @@ export function AddTaskSheet({ onAdd, onClose }: AddTaskSheetProps) {
     onClose();
   };
 
+  // 50dvh was sized for a single text field. With the date row, the shortcut and the
+  // helper line, the submit button fell below the fold once the keyboard opened.
   return (
-    <Sheet title="New task" onClose={onClose} maxHeight="50dvh">
+    <Sheet title="New task" onClose={onClose} maxHeight="85dvh">
       <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
         <input
           type="text"

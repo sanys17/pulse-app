@@ -99,6 +99,21 @@ function normalizeLocalEvent(event: LocalCalendarEvent): NormalizedEvent {
 
 const geist = "Geist, Inter, system-ui, sans-serif";
 
+// A task row has to say which day it belongs to, or the arc's denominator cannot be
+// worked out from the list. Backlog is deliberately quiet; overdue is the only one that
+// gets a colour, because it is the only one holding today back.
+function taskDayLabel(dueDate: string | null, todayKey: string): string {
+  if (dueDate === null) return "Backlog";
+  if (dueDate < todayKey) return "Overdue";
+  if (dueDate === todayKey) return "Today";
+  return dueDate.slice(5).replace("-", "/");
+}
+
+function taskDayTone(dueDate: string | null, todayKey: string): string {
+  if (dueDate !== null && dueDate < todayKey) return "var(--color-danger)";
+  return "var(--color-text-tertiary)";
+}
+
 // Empty states: one short line of secondary text, no illustration
 // (docs/design-system.md section 7). Tertiary rather than secondary ink —
 // --color-text-secondary is 3.4:1 on a card and fails AA.
@@ -443,8 +458,12 @@ export function Home(_props: HomeProps) {
   const navigate = useNavigate();
   const calendar = useGoogleCalendar();
   const { events: localEvents } = useCalendarEventsContext();
-  const { todaysHabits, isCompleted, toggleCompletion, getStreak } = useHabitsContext();
-  const { tasks: realTasks, toggleTask } = useTasksContext();
+  const { todaysHabits, isCompleted, toggleCompletion, getStreak, loading: habitsLoading } = useHabitsContext();
+  const { tasks: realTasks, toggleTask, loading: tasksLoading } = useTasksContext();
+  // Until both have answered, an empty list means "not known yet", not "nothing".
+  // Saying "Nothing planned today" on every cold start is how a true statement stops
+  // being believed.
+  const planLoading = habitsLoading || tasksLoading;
   const [activeTab, setActiveTab] = useState<"daily" | "social">("daily");
   const [calendarExpanded, setCalendarExpanded] = useState(false);
 
@@ -958,7 +977,7 @@ export function Home(_props: HomeProps) {
                 textAlign: "center",
                 textShadow: "0 2px 16px rgba(7,7,12,0.8)",
               }}>
-                {planLine}
+                {planLoading ? "\u00a0" : planLine}
               </span>
             </div>
           </div>
@@ -982,7 +1001,9 @@ export function Home(_props: HomeProps) {
           </h2>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-            {nextUpEvents.length === 0 && <p style={emptyLine}>Nothing scheduled today</p>}
+            {nextUpEvents.length === 0 && (
+              <p style={emptyLine}>{planLoading ? "\u00a0" : "Nothing scheduled today"}</p>
+            )}
             {nextUpEvents.map((event, i) => (
               <div key={event.id}>
                 {i > 0 && (
@@ -1271,6 +1292,19 @@ export function Home(_props: HomeProps) {
                     }}>
                       {task.label}
                     </span>
+                    {/* The arc counts only what is planned for today, while this card lists
+                        every task. Without the day on the row the arc's number cannot be
+                        reconstructed, which is the spec's first anti-goal. */}
+                    <span style={{
+                      fontFamily: geist,
+                      fontSize: 11,
+                      fontWeight: 500,
+                      letterSpacing: "0.02em",
+                      whiteSpace: "nowrap",
+                      color: taskDayTone(task.dueDate, todayKey),
+                    }}>
+                      {taskDayLabel(task.dueDate, todayKey)}
+                    </span>
                   </div>
                 </div>
               );
@@ -1298,7 +1332,9 @@ export function Home(_props: HomeProps) {
           gap: 12,
         }}>
           {todaysHabits.length === 0 ? (
-            <p style={{ ...emptyLine, gridColumn: "1 / -1" }}>No habits due today</p>
+            <p style={{ ...emptyLine, gridColumn: "1 / -1" }}>
+              {habitsLoading ? "\u00a0" : "No habits due today"}
+            </p>
           ) : todaysHabits.map((habit) => {
                 const completed = isCompleted(habit.id);
                 const streak = getStreak(habit.id);

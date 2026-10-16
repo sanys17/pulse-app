@@ -32,7 +32,16 @@ test("an undated task never counts", () => {
 });
 
 test("an undated task that is done still never counts", () => {
-  assert.equal(plannedToday([], [task("Someday", null, true)], "2026-10-16").length, 0);
+  // The helper leaves completedDateKey null, which is not what this name claims. Tick
+  // a backlog task today and it must still stay out of today's plan: it was never
+  // planned for any day, so finishing it cannot change today's denominator.
+  const t = { ...task("Someday", null, true), completedDateKey: "2026-10-16" };
+  assert.equal(plannedToday([], [t], "2026-10-16").length, 0);
+});
+
+test("a future-dated task finished early does not enter today's plan", () => {
+  const t = { ...task("Later", "2026-10-20", true), completedDateKey: "2026-10-16" };
+  assert.equal(plannedToday([], [t], "2026-10-16").length, 0);
 });
 
 test("a task dated in the future does not count yet", () => {

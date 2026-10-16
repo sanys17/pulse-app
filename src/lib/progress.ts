@@ -63,12 +63,15 @@ export function plannedToday(
   }
 
   for (const t of tasks) {
+    // Membership is decided by the day the task was planned for, never by the day it
+    // happened to be ticked. An undated task was never planned for any day and a
+    // future-dated one was planned for a later day, so finishing either of them today
+    // cannot change today's denominator.
+    if (t.dueDate === null || t.dueDate > todayKey) continue;
     // A task you dated and missed is still a plan you made, so it stays until it is
     // done. One finished today stays too, otherwise completing an overdue task would
-    // drop it out of the denominator and hold the arc flat instead of raising it.
-    const open = t.dueDate !== null && t.dueDate <= todayKey && !t.done;
-    const finishedToday = t.completedDateKey === todayKey;
-    if (!open && !finishedToday) continue;
+    // drop out of the denominator and hold the arc flat instead of raising it.
+    if (t.done && t.completedDateKey !== todayKey) continue;
     out.push({ id: t.id, name: t.label, done: t.done, rank: 1, at: t.createdAt });
   }
 

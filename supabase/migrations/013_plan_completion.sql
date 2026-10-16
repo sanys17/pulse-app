@@ -92,13 +92,28 @@ $$;
 
 -- Notifications follow the cadence --------------------------------------------
 
--- Redefines pending_notifications from 011. Only the two habit due-ness predicates
+-- Redefines the notification rules from 011. Only the two habit due-ness predicates
 -- change: both said "daily, or weekly on a Monday", which is the rule 013 replaces.
 -- Without this an every-2-days supplement would send a reminder on its off day, and
 -- the morning summary would count habits the arc does not.
 --
+-- IMPORTANT: this replaces pending_notifications_BASE, not pending_notifications.
+-- Migration 012 renamed 011's function to _base and made pending_notifications a thin
+-- wrapper that unions the base rules with the "someone joined your open plan" branch.
+-- Replacing the wrapper here would silently delete that branch and leave the orphaned
+-- base still carrying the old weekly-on-Monday rule.
+do $
+begin
+  if not exists (
+    select 1 from pg_proc
+    where proname = 'pending_notifications_base' and pronamespace = 'public'::regnamespace
+  ) then
+    raise exception 'Run 012_open_plans.sql before this migration: pending_notifications_base does not exist yet.';
+  end if;
+end $;
+
 -- The rest of the body is 011 verbatim; a function has to be replaced whole.
-create or replace function public.pending_notifications(p_now timestamptz default now())
+create or replace function public.pending_notifications_base(p_now timestamptz default now())
 returns table (user_id uuid, kind text, reference_id text, title text, body text, url text, tag text)
 language sql
 stable
@@ -312,4 +327,7 @@ as $$
 $$;
 
 
-grant execute on function public.pending_notifications(timestamptz) to service_role;
+-- 010, 011 and 012 all pair the grant with a revoke. CREATE OR REPLACE keeps the
+-- existing ACL, so this is belt and braces, but the pattern should not break here.
+revoke all on function public.pending_notifications_base(timestamptz) from public, anon, authenticated;
+grant execute on function public.pending_notifications_base(timestamptz) to service_role;
