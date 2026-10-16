@@ -1,6 +1,9 @@
 import { useState, useMemo, useRef, useCallback, useLayoutEffect, useEffect, lazy, Suspense, Component, type CSSProperties } from "react";
 import type { ReactNode } from "react";
 import { NeuroNoise } from "@paper-design/shaders-react";
+import { plannedToday, progressOf } from "../lib/progress";
+import { progressLine } from "../lib/progressCopy";
+import { toDateKey } from "../lib/dateKey";
 import { animateSpring } from "../lib/spring";
 import { useNavigate } from "react-router-dom";
 import { CaretDown } from "@phosphor-icons/react";
@@ -241,26 +244,6 @@ const NIGHT_SKY =
 // Dev-only escape hatch: ?sky=morning|afternoon|night forces a phase, so all three skies can
 // be checked on a real device without waiting out the clock. Stripped from production builds
 // by the import.meta.env.DEV guard, so the live app always follows the actual time.
-// Dev-only: ?hero=v2 previews an alternative hero — the arc owns the screen with the day's
-// percentage inside it, Next Up moves directly underneath, and the streak demotes to a chip
-// beside the date. The point is to resolve the arc-versus-streak competition by weight rather
-// than by deleting either of them. Stripped from production builds.
-function useHeroV2(): boolean {
-  if (!import.meta.env.DEV) return false;
-  return new URLSearchParams(window.location.search).get("hero") === "v2";
-}
-
-/** One short line under the percentage, earned rather than automatic. Deliberately not
- *  personalised: Home has no profile hook, and adding one for a preview would be a new data
- *  dependency. If the name is wanted, useProfile() is where it comes from. */
-function praiseFor(pct: number): string {
-  if (pct >= 100) return "Every habit done today";
-  if (pct >= 70) return "Almost there for today";
-  if (pct >= 30) return "Good start, keep going";
-  if (pct > 0) return "The first one is the hardest";
-  return "Nothing done yet today";
-}
-
 function currentSkyPhase(): SkyPhase {
   if (import.meta.env.DEV) {
     const forced = new URLSearchParams(window.location.search).get("sky");
@@ -460,66 +443,42 @@ export function Home(_props: HomeProps) {
   const navigate = useNavigate();
   const calendar = useGoogleCalendar();
   const { events: localEvents } = useCalendarEventsContext();
-  const { todaysHabits, todaysProgress, completions, isCompleted, toggleCompletion, getStreak } = useHabitsContext();
+  const { todaysHabits, isCompleted, toggleCompletion, getStreak } = useHabitsContext();
   const { tasks: realTasks, toggleTask } = useTasksContext();
   const [activeTab, setActiveTab] = useState<"daily" | "social">("daily");
   const [calendarExpanded, setCalendarExpanded] = useState(false);
 
-  const dailyStreak = useMemo(() => {
-    if (todaysHabits.length === 0) return 0;
-    const today = new Date();
-    let streak = 0;
-    for (let i = 0; i < 365; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      const allDone = todaysHabits.every((h) =>
-        completions.some((c) => c.habitId === h.id && c.date === key)
-      );
-      if (allDone) {
-        streak++;
-      } else if (i === 0) {
-        continue;
-      } else {
-        break;
-      }
-    }
-    return streak;
-  }, [todaysHabits, completions]);
-
-  const bestDailyStreak = useMemo(() => {
-    if (todaysHabits.length === 0) return 0;
-    const today = new Date();
-    let best = 0;
-    let current = 0;
-    for (let i = 364; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      const allDone = todaysHabits.every((h) =>
-        completions.some((c) => c.habitId === h.id && c.date === key)
-      );
-      if (allDone) {
-        current++;
-        if (current > best) best = current;
-      } else {
-        current = 0;
-      }
-    }
-    return best;
-  }, [todaysHabits, completions]);
-
-  const heroV2 = useHeroV2();
-  const displayStreak = dailyStreak;
-  const displayBest = bestDailyStreak;
-  const displayDone = todaysProgress.done;
-  const displayTotal = todaysProgress.total;
-  const progressPct = displayTotal > 0
-    ? Math.round((displayDone / displayTotal) * 100)
-    : 0;
-
   const today = new Date();
-  const todayKey = today.toISOString().slice(0, 10);
+  const todayKey = toDateKey(today);
+
+  // What the arc measures: how much of today's plan is done. Habits due today, plus
+  // tasks dated today or earlier and still open, plus tasks finished today. Every item
+  // counts once — see docs/superpowers/specs/2026-10-16-progress-arc-design.md.
+  const planned = useMemo(
+    () => plannedToday(
+      todaysHabits.map((h) => ({
+        id: h.id,
+        name: h.name,
+        cadence: h.cadence,
+        reminderTime: h.reminderTime,
+        createdAt: h.createdAt,
+        done: isCompleted(h.id),
+      })),
+      realTasks.map((t) => ({
+        id: t.id,
+        label: t.label,
+        dueDate: t.dueDate,
+        done: t.done,
+        completedDateKey: t.completedDateKey,
+        createdAt: t.createdAt,
+      })),
+      todayKey,
+    ),
+    [todaysHabits, realTasks, isCompleted, todayKey],
+  );
+
+  const progressPct = progressOf(planned).pct;
+  const planLine = progressLine(planned);
   const monthStr = today.toLocaleDateString("en-US", { month: "short" });
   const dayNum = today.getDate();
   const weekday = today.toLocaleDateString("en-US", { weekday: "long" });
@@ -976,69 +935,33 @@ export function Home(_props: HomeProps) {
               </g>
             </svg>
 
-            {/* Streak number — below the arc, so the summit can rise into the
-                hollow under the curve */}
-            {/* Negative margin lifts the number INTO the dome rather than stacking it below.
-                The arc's underside across the digits sits at about y=18.4, and the box is
-                89 tall, so marginTop must stay above about -66 or the number touches the
-                stroke. At -20 the number's top is at y=72, leaving ~54px of clearance.
-                Both figures derive from ARC_W, so a thinner stroke only adds clearance. */}
+            {/* The line sits in the hollow under the curve. No number: the gauge scale
+                already carries the value, and a dial does not need a digital readout.
+                The negative margin lifts it INTO the dome rather than stacking it below;
+                the arc's underside across the text is at about y=18.4 in a box 89 tall,
+                and both figures derive from ARC_W. */}
             <div style={{
-              marginTop: heroV2 ? -46 : -20,
+              marginTop: -26,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
+              padding: "0 var(--space-4)",
             }}>
               <span style={{
                 fontFamily: geist,
-                fontWeight: 700,
-                fontSize: heroV2 ? 52 : 64,
+                fontWeight: 600,
+                fontSize: 17,
+                // Solid, not translucent: this sits straight on a photographic sky, and
+                // translucent ink composites with whatever is behind it.
                 color: "#EAECF4",
-                lineHeight: 1,
-                letterSpacing: "-0.02em",
+                lineHeight: 1.2,
+                textAlign: "center",
                 textShadow: "0 2px 16px rgba(7,7,12,0.8)",
               }}>
-                {heroV2 ? progressPct : displayStreak}
-                {heroV2 && <span style={{ fontSize: 24, fontWeight: 600 }}>%</span>}
+                {planLine}
               </span>
-              {heroV2 && (
-                <span style={{
-                  fontFamily: geist,
-                  fontWeight: 500,
-                  fontSize: 13,
-                  color: "rgba(255,255,255,0.8)",
-                  marginTop: 7,
-                  textShadow: "0 1px 6px rgba(7,7,12,0.6)",
-                }}>
-                  {praiseFor(progressPct)}
-                </span>
-              )}
             </div>
           </div>
-          {!heroV2 && (
-          <span style={{
-            fontFamily: geist,
-            fontWeight: 600,
-            fontSize: 17,
-            color: "#EAECF4",
-            marginTop: 6,
-            textShadow: "0 1px 8px rgba(7,7,12,0.6)",
-          }}>
-            Day Streak
-          </span>
-          )}
-          {!heroV2 && (
-          <span style={{
-            fontFamily: geist,
-            fontWeight: 400,
-            fontSize: 13,
-            color: "rgba(255,255,255,0.75)",
-            marginTop: 3,
-            textShadow: "0 1px 6px rgba(7,7,12,0.6)",
-          }}>
-            Best: {displayBest} days
-          </span>
-          )}
         </div>
 
         {/* Next Up — inside the hero image */}
