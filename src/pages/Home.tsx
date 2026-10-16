@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback, useLayoutEffect, useEffect, lazy, Suspense, Component, type CSSProperties } from "react";
+import { useState, useMemo, useRef, useCallback, useLayoutEffect, useEffect, lazy, Suspense, Component } from "react";
 import type { ReactNode } from "react";
 import { NeuroNoise } from "@paper-design/shaders-react";
 import { animateSpring } from "../lib/spring";
@@ -182,26 +182,25 @@ const geist = "Geist, Inter, system-ui, sans-serif";
 const ARC_R = 198;
 const ARC_CX = 170;
 const ARC_HALF_CHORD = 155;
-const ARC_W = 8;
+const ARC_W = 6;
 const ARC_BASE_Y = 85;
 const ARC_BOX_W = 340;
 const ARC_BOX_H = Math.ceil(ARC_BASE_Y + ARC_W / 2 + 1);
 const ARC_CY = ARC_BASE_Y + Math.sqrt(ARC_R * ARC_R - ARC_HALF_CHORD * ARC_HALF_CHORD);
 const ARC_HALF = Math.acos(ARC_HALF_CHORD / ARC_R);
-// Gauge scale labels, pinned under the arc's own endpoints (ARC_CX +/- ARC_HALF_CHORD),
-// not the box edges, so they stay with the arc if its geometry changes.
-const SCALE_LABEL_BASE: CSSProperties = {
-  position: "absolute",
-  top: ARC_BASE_Y + 12,
-  width: 48,
-  textAlign: "center",
-  fontWeight: 500,
-  fontSize: 12,
-  color: "rgba(234,236,244,0.55)",
-  textShadow: "0 1px 6px rgba(7,7,12,0.6)",
-};
-const SCALE_LABEL_LEFT: CSSProperties = { ...SCALE_LABEL_BASE, left: ARC_CX - ARC_HALF_CHORD - 24 };
-const SCALE_LABEL_RIGHT: CSSProperties = { ...SCALE_LABEL_BASE, left: ARC_CX + ARC_HALF_CHORD - 24 };
+// Gauge scale. Only the two ends are numbered; the values between them are dots. Spelling
+// out 20/40/60/80 would put five labels around a dial whose whole job is to be read at a
+// glance, and the dots carry the sense of scale on their own. Everything here is drawn in
+// the arc's own viewBox and derived from ARC_R/ARC_W, so the scale follows the arc if its
+// geometry changes — the old version was pinned in CSS and had to be re-tuned by hand.
+const SCALE_DOTS = [20, 40, 60, 80];
+const SCALE_DOT_R = 2.5;
+// One ring for the whole scale, dots and end numbers alike, outside the stroke so it never
+// competes with the score inside the dome. At +20 the top dots sit about 9px ABOVE the arc
+// box, which is what the overflow on the SVG below is for; ARC_BOX_H only ever covered the
+// stroke. Raising this further eats into the column's side margin — see the note there.
+const SCALE_RADIUS = ARC_R + ARC_W / 2 + 20;
+const SCALE_INK = "rgba(234,236,244,0.72)";
 
 const ARC_PATH = `M ${ARC_CX - ARC_HALF_CHORD},${ARC_BASE_Y} A ${ARC_R},${ARC_R} 0 0,1 ${ARC_CX + ARC_HALF_CHORD},${ARC_BASE_Y}`;
 // Vertical focal point of the hero photo. Lower values show more sky, which
@@ -219,10 +218,24 @@ function arcAngle(progress: number): number {
   return ARC_A0 + (ARC_A1 - ARC_A0) * (progress / 100);
 }
 
+// A point on a circle concentric with the arc: radius ARC_R is the stroke's centreline,
+// anything larger sits outside it.
+function arcPointAt(progress: number, radius: number): { x: number; y: number } {
+  const a = arcAngle(progress);
+  return { x: ARC_CX + radius * Math.cos(a), y: ARC_CY + radius * Math.sin(a) };
+}
+
 // Centre of the round cap at the leading edge of the fill.
 function arcTip(progress: number): { x: number; y: number } {
+  return arcPointAt(progress, ARC_R);
+}
+
+// Degrees to rotate a label so it lies along the arc's tangent. The tangent vector is
+// (-sin a, cos a); at the endpoints this is about +/-51.5 degrees, which is what gives the
+// end numbers their lean.
+function arcTangentDeg(progress: number): number {
   const a = arcAngle(progress);
-  return { x: ARC_CX + ARC_R * Math.cos(a), y: ARC_CY + ARC_R * Math.sin(a) };
+  return (Math.atan2(Math.cos(a), -Math.sin(a)) * 180) / Math.PI;
 }
 
 // Closed ribbon outline of the filled part of the arc, with round caps at both
@@ -923,16 +936,74 @@ export function Home(_props: HomeProps) {
                 userSpaceOnUse units, so all three layers must stay 1:1. */}
             <svg
               viewBox={`0 0 ${ARC_BOX_W} ${ARC_BOX_H}`}
-              style={{ width: ARC_BOX_W, height: ARC_BOX_H, display: "block" }}
+              style={{
+                width: ARC_BOX_W,
+                height: ARC_BOX_H,
+                display: "block",
+                // The scale ring rises above the box at the top and past it at the sides.
+                overflow: "visible",
+              }}
             >
-              {/* Track — the not-done part of the arc */}
+              {/* Channel — a dark substrate under the WHOLE arc, done part included.
+                  Without it the arc's colour is set by whichever sky is behind it: a
+                  translucent tint is the brightest thing on the night gradient and washes
+                  out over the afternoon sky, so the two halves drift apart per phase. The
+                  channel gives every phase the same footing, and doubles as the arc's own
+                  local scrim, which is what let the radial scrim above come down to 0.25. */}
               <path
                 d={ARC_PATH}
                 fill="none"
-                stroke="rgba(142,155,196,0.5)"
+                stroke="rgba(7,7,12,0.5)"
                 strokeWidth={ARC_W}
                 strokeLinecap="round"
               />
+              {/* Track — the not-done part of the arc. Was 0.5, which made the EMPTY half of
+                  the arc ~13x more luminous than the filled half: progress erased the arc
+                  instead of filling it. The not-done part is the recessive one, so this is
+                  only a hint of Moonstone over the channel — enough to read as a tinted
+                  groove rather than a dead grey one. */}
+              <path
+                d={ARC_PATH}
+                fill="none"
+                stroke="rgba(142,155,196,0.2)"
+                strokeWidth={ARC_W}
+                strokeLinecap="round"
+              />
+              {/* Gauge scale, outside the stroke. One shadow on the group rather than per
+                  mark: these sit straight on the sky, and the sky is a photograph. */}
+              <g style={{ filter: "drop-shadow(0 1px 3px rgba(7,7,12,0.7))" }}>
+                {SCALE_DOTS.map((v) => {
+                  const p = arcPointAt(v, SCALE_RADIUS);
+                  return <circle key={v} cx={p.x} cy={p.y} r={SCALE_DOT_R} fill={SCALE_INK} />;
+                })}
+                {[0, 100].map((v) => {
+                  const p = arcPointAt(v, SCALE_RADIUS);
+                  return (
+                    <text
+                      key={v}
+                      x={p.x}
+                      y={p.y}
+                      // dy rather than dominantBaseline: the baseline keywords have a
+                      // patchy history in iOS Safari, and this is the one browser that
+                      // has to be right.
+                      dy="0.35em"
+                      textAnchor="middle"
+                      transform={`rotate(${arcTangentDeg(v)} ${p.x} ${p.y})`}
+                      fill={SCALE_INK}
+                      style={{
+                        fontFamily: geist,
+                        fontSize: 12,
+                        fontWeight: 500,
+                        // Small text takes positive tracking, and these are small AND
+                        // rotated, which costs legibility on its own.
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      {v}
+                    </text>
+                  );
+                })}
+              </g>
             </svg>
 
             {/* Water shader, clipped to the done part of the arc */}
@@ -946,14 +1017,20 @@ export function Home(_props: HomeProps) {
               WebkitClipPath: `url(#${arcIds.clip})`,
               pointerEvents: "none",
             }}>
+              {/* The fill carries the achievement, so it is the bright layer. These used to
+                  be the surface tokens (#2A2A3C / #1C1C2A / #121220) — the colours of cards,
+                  not of a value indicator — which put the whole fill between luminance 0.025
+                  and 0.045 and made the water motion invisible at any brightness. They are
+                  now the accent family, and colorFront matches the leading-edge glow stop at
+                  arcIds.glow so the fill and the specular highlight read as one lit edge. */}
               <NeuroNoise
                 width={ARC_BOX_W}
                 height={ARC_BOX_H}
-                colorFront="#2A2A3C"
-                colorMid="#1C1C2A"
-                colorBack="#121220"
-                brightness={0.35}
-                contrast={0.6}
+                colorFront="#D8E0F7"
+                colorMid="#8E9BC4"
+                colorBack="#6B78A0"
+                brightness={0.8}
+                contrast={0.5}
                 speed={0.9}
                 scale={0.8}
               />
@@ -983,9 +1060,10 @@ export function Home(_props: HomeProps) {
             {/* Streak number — below the arc, so the summit can rise into the
                 hollow under the curve */}
             {/* Negative margin lifts the number INTO the dome rather than stacking it below.
-                The arc's underside across the digits sits at y=19.4, and the box is 92 tall,
-                so marginTop must stay above about -66 or the number touches the stroke.
-                At -20 the number's top is at y=72, leaving ~53px of clearance. */}
+                The arc's underside across the digits sits at about y=18.4, and the box is
+                89 tall, so marginTop must stay above about -66 or the number touches the
+                stroke. At -20 the number's top is at y=72, leaving ~54px of clearance.
+                Both figures derive from ARC_W, so a thinner stroke only adds clearance. */}
             <div style={{
               marginTop: heroV2 ? -46 : -20,
               display: "flex",
@@ -1017,14 +1095,6 @@ export function Home(_props: HomeProps) {
                 </span>
               )}
             </div>
-            {/* Scale labels: the gauge means nothing without them once it holds a value.
-                Pinned to the arc's own endpoints rather than the box edges. */}
-            {heroV2 && (
-              <>
-                <span style={SCALE_LABEL_LEFT}>0</span>
-                <span style={SCALE_LABEL_RIGHT}>100</span>
-              </>
-            )}
           </div>
           {!heroV2 && (
           <span style={{
