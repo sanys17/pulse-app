@@ -1,5 +1,6 @@
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { cadenceToRow } from "./cadence";
 
 const MIGRATED_FLAG = "pulse-migrated";
 
@@ -70,7 +71,7 @@ async function doMigrate(user: User): Promise<void> {
             name: h.name,
             icon: h.icon,
             color: h.color,
-            frequency: h.frequency,
+            ...cadenceToRow(h.frequency === "weekly" ? { kind: "weekdays", days: [1] } : { kind: "daily" }),
           }))
         )
         .select();

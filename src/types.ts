@@ -1,9 +1,13 @@
+import type { Cadence } from "./lib/cadence";
+
+export type { Cadence };
+
 export interface Habit {
   id: string;
   name: string;
   icon: string;
   color: HabitColor;
-  frequency: "daily" | "weekly";
+  cadence: Cadence;
   reminderTime: string | null; // "HH:MM", null = no reminder
   createdAt: string;
 }
@@ -13,7 +17,7 @@ export interface HabitInput {
   name: string;
   icon: string;
   color: HabitColor;
-  frequency: "daily" | "weekly";
+  cadence: Cadence;
   reminderTime: string | null;
 }
 

@@ -5,7 +5,19 @@ Last updated: 2026-10-16. Update this file at the end of any session that change
 ## Status
 Deployed on Vercel from `master`. `npm run build`, `npx tsc -b` and `npm test` (94 tests) all pass.
 
-**Active branch is `feat/sky-backgrounds`, 28 commits, branched off `home-redesign-v2`** (which is itself 3 commits ahead of `master` and carries the Oura-style progress arc). **The sky was verified on the iPhone by the user on 2026-10-16**, which cleared the branch's long-standing blocker, and it is now **open as PR #16** into `master`. Not merged.
+**`feat/sky-backgrounds` was verified on the iPhone and merged as PR #16** (2026-10-16). The skies, the rebuilt arc and the gauge scale are on `master`.
+
+**Active branch is `feat/progress-arc`, off `master` at 548ec2f.** It implements the whole progress-arc spec plus a fix for mock data that reached production with PR #16. Not merged, not deployed.
+
+> **RELEASE ORDER — this branch does not work without its migration.**
+> Run `011_per_item_reminders.sql`, then `012_open_plans.sql`, then
+> `013_plan_completion.sql` in the Supabase SQL Editor, **then** deploy.
+> Every write path on this branch sends columns that only exist after 013:
+> adding or editing a habit, adding a task, and ticking a task. PostgREST
+> rejects the whole statement (`PGRST204`) until the columns exist, and
+> `toggleTask` does not roll back or warn — a tick would simply vanish on
+> reload. Reads degrade gracefully (`cadenceFromRow` tolerates the missing
+> columns and the old `weekly` value); writes do not.
 
 Corrections to earlier versions of this file, found 2026-10-15: the `home-redesign-v2` work *is* committed (it was described here as uncommitted), and PRs #8 and #15 are **merged**, not open. PRs #1-#15 are all closed or merged; #16 is the only open one.
 
@@ -85,14 +97,15 @@ deliberately untracked. Consider adding `public/assets/*.jpg` to `.gitignore`.
    `glow-ellipse.svg`, `fab-plus.svg`, `nav-left.svg`, `nav-social.svg`. Left in place
    deliberately — deleting them was outside what was asked.
 
-## What the progress arc measures (spec and plan, nothing built)
+## What the progress arc measures (built on `feat/progress-arc`)
 
 Spec: `docs/superpowers/specs/2026-10-16-progress-arc-design.md`. Plan:
-`docs/superpowers/plans/2026-10-16-progress-arc.md`. Both committed on `feat/sky-backgrounds`;
-no code is implemented.
+`docs/superpowers/plans/2026-10-16-progress-arc.md`. Implemented in ten commits; `npm test`
+is 142/142 and `npm run build` is clean. Reviewed by a fresh whole-branch reviewer; two
+Critical and six Important findings were fixed, deferred minors are listed below.
 
-The arc currently measures habits only, which was an implementation default rather than a
-decision. It should measure **how much of today's plan is done**: habits due today plus tasks
+The arc used to measure habits only, which was an implementation default rather than a
+decision. It now measures **how much of today's plan is done**: habits due today plus tasks
 dated today or earlier and still open. Decided with the user:
 
 - Overdue tasks roll forward; missed habits do not. 100% is unreachable while anything is
@@ -107,7 +120,33 @@ dated today or earlier and still open. Decided with the user:
 - Supplements are habits that need a cadence: every day / 2 days / 3 days / certain weekdays,
   with a user-chosen start date. This also resolves the Monday hardcode for weekly habits.
 
-Needs migration `013` (a date and `completed_at` on tasks, cadence columns on habits) and
+**What shipped beyond the spec, and what is still open:**
+
+- The mock data that reached production with PR #16 is gone: `FAKE_HABITS`, `FAKE_TASKS`,
+  `makeFakeEvents` and the whole fake Supplements carousel (mock UI for a feature that does
+  not exist). Home has real empty states now.
+- Two pre-existing UTC date-key bugs were found and fixed. `toDateKey` was
+  `toISOString().slice(0,10)` in both `useHabits` and `Home`, so east of UTC a completion
+  after local midnight was filed against the previous day. Now `src/lib/dateKey.ts`, tested.
+- `013` redefines `pending_notifications_BASE`, not `pending_notifications`. 012 renamed
+  011's function to `_base` and made `pending_notifications` a wrapper that adds the
+  "someone joined your open plan" branch; replacing the wrapper would silently delete that
+  feature. 013 raises an exception if `_base` is missing, i.e. if 012 was skipped.
+- **Known divergence, accepted:** the push copy still says "N habits left today" and the
+  morning summary still counts habits only, while the arc counts tasks too. Bringing tasks
+  into the notification copy is a follow-up.
+- **Deferred minors from the branch review:** `cadenceLabel` is tested but rendered nowhere,
+  so the Habits list never tells you a habit's cadence; `hasHiddenWeekly` is returned by the
+  hook and read by nobody; habit mutations still filter by `id` only (RLS covers it);
+  the weekday chip row overflows below ~364px wide; the 20-character name cap can split an
+  emoji surrogate pair; `progress.ts` sorts habit date keys against task ISO timestamps, so
+  same-day ties always put habits first for a formatting reason.
+- `src/pages/Tasks.tsx` is still a "Coming soon" stub, so Home's Tasks card is the only
+  place tasks are visible. It lists every task and counts "N of M" over all of them, while
+  the arc counts only what is planned for today; each row now shows Today / Overdue /
+  Backlog / a date so the arc's number can still be reconstructed.
+
+Needed migration `013` (a date and `completed_at` on tasks, cadence columns on habits) and
 touches `pending_notifications`. **The app is also meant to support Czech, and has no i18n
 layer whatsoever** — no library, no locale files. That is a project in its own right and
 nothing else in this file mentions it.
@@ -139,15 +178,16 @@ Better Stack error tracking (US region; EU needs a paid plan), app `Pulse-web`. 
 10. `skyPhase` and `SKY_BOUNDARY_HOURS` both encode 5/11/18; `skyPhase` now derives from the shared table, but nothing asserts they agree.
 
 ## Next steps (suggested order)
-1. **Review and merge PR #16.** The branch's blocker is cleared and the tree is clean.
-2. **Build the progress arc's meaning**, off `master`, following
-   `docs/superpowers/plans/2026-10-16-progress-arc.md`. The plan's own advice is to take it in
-   two halves: tasks 2, 5, 6, 7, 8 give the arc its new meaning; tasks 1, 3, 4, 9 add the habit
-   cadence and are about 45% of the work and most of the risk. Run `011` and `012` in the SQL
-   Editor first — per this file they have never been applied — then `013`.
-   The standing hazard in this project is unverified work piling up unmerged, so merge each
-   half before starting the next.
-3. Live updates for own-data tables (habits, completions, tasks, calendar events) with an echo
+1. **Run `011`, `012`, `013` in the SQL Editor, in that order.** Nothing on
+   `feat/progress-arc` can be deployed before this; see the release-order box above.
+2. **Run `supabase/tests/pending_notifications.test.sql`** in the SQL Editor. It is the only
+   test in this project that cannot run from a dev machine, and it now covers the habit
+   cadence and the "someone joined your plan" branch. Success looks like `ALL TESTS PASSED`.
+3. **Device-check `feat/progress-arc`**: create a habit of each cadence; tick a task, un-tick
+   it and reload (the un-tick path has no automated test and is the one place a stale
+   `completed_at` would pin the arc); confirm the dome's line and the gauge scale are legible
+   over all three skies.
+4. Live updates for own-data tables (habits, completions, tasks, calendar events) with an echo
    guard.
 4. Design cleanup: tokens for accent/status colors, one glass recipe, contrast fixes.
 5. Finish verifying push notifications on a real iPhone: habit, event (two alerts), plan,

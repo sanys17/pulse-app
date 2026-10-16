@@ -34,6 +34,9 @@ export type Database = {
           frequency: string;
           created_at: string;
           reminder_time: string | null;
+          interval_days: number | null;
+          start_date: string | null;
+          weekdays: number[] | null;
         };
         Insert: {
           id?: string;
@@ -43,6 +46,9 @@ export type Database = {
           color: string;
           frequency: string;
           reminder_time?: string | null;
+          interval_days?: number | null;
+          start_date?: string | null;
+          weekdays?: number[] | null;
         };
         Update: {
           name?: string;
@@ -50,6 +56,9 @@ export type Database = {
           color?: string;
           frequency?: string;
           reminder_time?: string | null;
+          interval_days?: number | null;
+          start_date?: string | null;
+          weekdays?: number[] | null;
         };
         Relationships: [];
       };
@@ -79,16 +88,22 @@ export type Database = {
           label: string;
           done: boolean;
           created_at: string;
+          due_date: string | null;
+          completed_at: string | null;
         };
         Insert: {
           id?: string;
           user_id: string;
           label: string;
           done?: boolean;
+          due_date?: string | null;
+          completed_at?: string | null;
         };
         Update: {
           label?: string;
           done?: boolean;
+          due_date?: string | null;
+          completed_at?: string | null;
         };
         Relationships: [];
       };
@@ -343,6 +358,16 @@ export type Database = {
       register_push_subscription: {
         Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_user_agent: string };
         Returns: undefined;
+      };
+      habit_due_on: {
+        Args: {
+          p_frequency: string;
+          p_interval_days: number | null;
+          p_start_date: string | null;
+          p_weekdays: number[] | null;
+          p_on: string;
+        };
+        Returns: boolean;
       };
     };
     Enums: { [_ in never]: never };

@@ -1,6 +1,9 @@
-import { useState, useMemo, useRef, useCallback, useLayoutEffect, useEffect, lazy, Suspense, Component } from "react";
+import { useState, useMemo, useRef, useCallback, useLayoutEffect, useEffect, lazy, Suspense, Component, type CSSProperties } from "react";
 import type { ReactNode } from "react";
 import { NeuroNoise } from "@paper-design/shaders-react";
+import { plannedToday, progressOf } from "../lib/progress";
+import { progressLine } from "../lib/progressCopy";
+import { toDateKey } from "../lib/dateKey";
 import { animateSpring } from "../lib/spring";
 import { useNavigate } from "react-router-dom";
 import { CaretDown } from "@phosphor-icons/react";
@@ -15,10 +18,9 @@ import { useHabitsContext } from "../context/HabitsContext";
 import { useTasksContext } from "../context/TasksContext";
 import { useGoogleCalendar, formatRelativeTime } from "../hooks/useGoogleCalendar";
 import { HABIT_COLORS } from "../types";
-import type { Habit, HabitColor } from "../types";
+import type { Habit } from "../types";
 import type { CalendarEvent as LocalCalendarEvent } from "../hooks/useCalendarEvents";
 import { HabitIcon } from "../components/HabitIcon";
-import type { Task } from "../hooks/useTasks";
 
 interface HomeProps {
   onEditHabit: (habit: Habit) => void;
@@ -95,86 +97,34 @@ function normalizeLocalEvent(event: LocalCalendarEvent): NormalizedEvent {
   };
 }
 
-function makeFakeEvents(): NormalizedEvent[] {
-  const now = new Date();
-  const t = (h: number, m: number) => {
-    const d = new Date(now);
-    d.setHours(h, m, 0, 0);
-    return d;
-  };
-  const fmt = (d: Date) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-  const rel = (d: Date) => {
-    const diffMin = Math.round((d.getTime() - now.getTime()) / 60000);
-    if (diffMin < 0) return `${Math.abs(diffMin)} min ago`;
-    if (diffMin === 0) return "now";
-    if (diffMin < 60) return `in ${diffMin} min`;
-    const hours = Math.floor(diffMin / 60);
-    const mins = diffMin % 60;
-    if (mins === 0) return `in ${hours}h`;
-    return `in ${hours}h ${mins}m`;
-  };
-
-  const events = [
-    { h: now.getHours(), m: now.getMinutes() + 30, title: "Padel with Michael" },
-    { h: 18, m: 30, title: "Dinner with Monika" },
-    { h: 9, m: 0, title: "Doctor's at Parkville Ave" },
-    { h: 11, m: 30, title: "Meeting with Marc" },
-    { h: 13, m: 30, title: "Meeting with Clients" },
-    { h: 15, m: 0, title: "Design Review" },
-    { h: 17, m: 0, title: "Pick up groceries" },
-  ];
-
-  return events.map((e, i) => {
-    const d = t(e.h, e.m);
-    return {
-      id: `fake-${i}`,
-      title: e.title,
-      time: fmt(d),
-      relativeTime: rel(d),
-      sortKey: d.getTime(),
-    };
-  });
-}
-
-interface FakeHabit {
-  id: string;
-  name: string;
-  icon: string;
-  color: HabitColor;
-  completed: boolean;
-  streak: number;
-}
-
-const FAKE_HABITS: FakeHabit[] = [
-  { id: "fh1", name: "Meditate", icon: "YinYang", color: "green", completed: true, streak: 12 },
-  { id: "fh2", name: "Read a Book", icon: "BookOpen", color: "blue", completed: false, streak: 10 },
-  { id: "fh3", name: "Exercise", icon: "Barbell", color: "red", completed: true, streak: 8 },
-  { id: "fh4", name: "Journal", icon: "Pencil", color: "purple", completed: false, streak: 5 },
-  { id: "fh5", name: "Drink Water", icon: "Drop", color: "blue", completed: true, streak: 21 },
-  { id: "fh6", name: "Walk 10k Steps", icon: "Footprints", color: "orange", completed: false, streak: 3 },
-];
-
-const FAKE_TASKS: Task[] = [
-  { id: "ft1", label: "Review App Design", done: false },
-  { id: "ft2", label: "Call Marc", done: false },
-  { id: "ft3", label: "Schedule a Meeting", done: false },
-];
-
-interface FakeSupplement {
-  id: string;
-  name: string;
-  dosage: string;
-  image: string;
-  taken: boolean;
-}
-
-const FAKE_SUPPLEMENTS: FakeSupplement[] = [
-  { id: "fs1", name: "Magnesium", dosage: "2 pills", image: "/assets/morning_shot.webp", taken: false },
-  { id: "fs2", name: "D3+K2", dosage: "1 pill", image: "/assets/morning_shot.webp", taken: false },
-  { id: "fs3", name: "Omega", dosage: "1 pill", image: "/assets/morning_shot.webp", taken: false },
-];
-
 const geist = "Geist, Inter, system-ui, sans-serif";
+
+// A task row has to say which day it belongs to, or the arc's denominator cannot be
+// worked out from the list. Backlog is deliberately quiet; overdue is the only one that
+// gets a colour, because it is the only one holding today back.
+function taskDayLabel(dueDate: string | null, todayKey: string): string {
+  if (dueDate === null) return "Backlog";
+  if (dueDate < todayKey) return "Overdue";
+  if (dueDate === todayKey) return "Today";
+  return dueDate.slice(5).replace("-", "/");
+}
+
+function taskDayTone(dueDate: string | null, todayKey: string): string {
+  if (dueDate !== null && dueDate < todayKey) return "var(--color-danger)";
+  return "var(--color-text-tertiary)";
+}
+
+// Empty states: one short line of secondary text, no illustration
+// (docs/design-system.md section 7). Tertiary rather than secondary ink —
+// --color-text-secondary is 3.4:1 on a card and fails AA.
+const emptyLine: CSSProperties = {
+  fontFamily: geist,
+  fontWeight: 400,
+  fontSize: 14,
+  color: "var(--color-text-tertiary)",
+  margin: 0,
+  textShadow: "0 1px 6px rgba(7,7,12,0.6)",
+};
 
 // Progress arc: the top slice of a large circle. Endpoints sit at
 // (15,85) and (325,85), so the centre is 155 left of x=170 and well below
@@ -309,26 +259,6 @@ const NIGHT_SKY =
 // Dev-only escape hatch: ?sky=morning|afternoon|night forces a phase, so all three skies can
 // be checked on a real device without waiting out the clock. Stripped from production builds
 // by the import.meta.env.DEV guard, so the live app always follows the actual time.
-// Dev-only: ?hero=v2 previews an alternative hero — the arc owns the screen with the day's
-// percentage inside it, Next Up moves directly underneath, and the streak demotes to a chip
-// beside the date. The point is to resolve the arc-versus-streak competition by weight rather
-// than by deleting either of them. Stripped from production builds.
-function useHeroV2(): boolean {
-  if (!import.meta.env.DEV) return false;
-  return new URLSearchParams(window.location.search).get("hero") === "v2";
-}
-
-/** One short line under the percentage, earned rather than automatic. Deliberately not
- *  personalised: Home has no profile hook, and adding one for a preview would be a new data
- *  dependency. If the name is wanted, useProfile() is where it comes from. */
-function praiseFor(pct: number): string {
-  if (pct >= 100) return "Every habit done today";
-  if (pct >= 70) return "Almost there for today";
-  if (pct >= 30) return "Good start, keep going";
-  if (pct > 0) return "The first one is the hardest";
-  return "Nothing done yet today";
-}
-
 function currentSkyPhase(): SkyPhase {
   if (import.meta.env.DEV) {
     const forced = new URLSearchParams(window.location.search).get("sky");
@@ -528,78 +458,46 @@ export function Home(_props: HomeProps) {
   const navigate = useNavigate();
   const calendar = useGoogleCalendar();
   const { events: localEvents } = useCalendarEventsContext();
-  const { todaysHabits, todaysProgress, completions, isCompleted, toggleCompletion, getStreak } = useHabitsContext();
-  const { tasks: realTasks, toggleTask } = useTasksContext();
+  const { todaysHabits, isCompleted, toggleCompletion, getStreak, loading: habitsLoading } = useHabitsContext();
+  const { tasks: realTasks, toggleTask, loading: tasksLoading } = useTasksContext();
+  // Until both have answered, an empty list means "not known yet", not "nothing".
+  // Saying "Nothing planned today" on every cold start is how a true statement stops
+  // being believed.
+  const planLoading = habitsLoading || tasksLoading;
   const [activeTab, setActiveTab] = useState<"daily" | "social">("daily");
   const [calendarExpanded, setCalendarExpanded] = useState(false);
-  const [fakeTaskState, setFakeTaskState] = useState<Record<string, boolean>>({});
-  const [fakeHabitState, setFakeHabitState] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(FAKE_HABITS.map((h) => [h.id, h.completed]))
-  );
-  const [fakeSupplementState, setFakeSupplementState] = useState<Record<string, boolean>>({});
-
-  const usingFakeHabits = todaysHabits.length === 0;
-  const usingFakeTasks = realTasks.length === 0;
-  const displayTasks = usingFakeTasks ? FAKE_TASKS : realTasks;
-
-  const dailyStreak = useMemo(() => {
-    if (todaysHabits.length === 0) return 0;
-    const today = new Date();
-    let streak = 0;
-    for (let i = 0; i < 365; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      const allDone = todaysHabits.every((h) =>
-        completions.some((c) => c.habitId === h.id && c.date === key)
-      );
-      if (allDone) {
-        streak++;
-      } else if (i === 0) {
-        continue;
-      } else {
-        break;
-      }
-    }
-    return streak;
-  }, [todaysHabits, completions]);
-
-  const bestDailyStreak = useMemo(() => {
-    if (todaysHabits.length === 0) return 0;
-    const today = new Date();
-    let best = 0;
-    let current = 0;
-    for (let i = 364; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      const allDone = todaysHabits.every((h) =>
-        completions.some((c) => c.habitId === h.id && c.date === key)
-      );
-      if (allDone) {
-        current++;
-        if (current > best) best = current;
-      } else {
-        current = 0;
-      }
-    }
-    return best;
-  }, [todaysHabits, completions]);
-
-  const fakeHabitsDone = useMemo(() => Object.values(fakeHabitState).filter(Boolean).length, [fakeHabitState]);
-  const fakeHabitsTotal = FAKE_HABITS.length;
-
-  const heroV2 = useHeroV2();
-  const displayStreak = usingFakeHabits ? 12 : dailyStreak;
-  const displayBest = usingFakeHabits ? 14 : bestDailyStreak;
-  const displayDone = usingFakeHabits ? fakeHabitsDone : todaysProgress.done;
-  const displayTotal = usingFakeHabits ? fakeHabitsTotal : todaysProgress.total;
-  const progressPct = displayTotal > 0
-    ? Math.round((displayDone / displayTotal) * 100)
-    : 0;
 
   const today = new Date();
-  const todayKey = today.toISOString().slice(0, 10);
+  const todayKey = toDateKey(today);
+
+  // What the arc measures: how much of today's plan is done. Habits due today, plus
+  // tasks dated today or earlier and still open, plus tasks finished today. Every item
+  // counts once — see docs/superpowers/specs/2026-10-16-progress-arc-design.md.
+  const planned = useMemo(
+    () => plannedToday(
+      todaysHabits.map((h) => ({
+        id: h.id,
+        name: h.name,
+        cadence: h.cadence,
+        reminderTime: h.reminderTime,
+        createdAt: h.createdAt,
+        done: isCompleted(h.id),
+      })),
+      realTasks.map((t) => ({
+        id: t.id,
+        label: t.label,
+        dueDate: t.dueDate,
+        done: t.done,
+        completedDateKey: t.completedDateKey,
+        createdAt: t.createdAt,
+      })),
+      todayKey,
+    ),
+    [todaysHabits, realTasks, isCompleted, todayKey],
+  );
+
+  const progressPct = progressOf(planned).pct;
+  const planLine = progressLine(planned);
   const monthStr = today.toLocaleDateString("en-US", { month: "short" });
   const dayNum = today.getDate();
   const weekday = today.toLocaleDateString("en-US", { weekday: "long" });
@@ -772,7 +670,6 @@ export function Home(_props: HomeProps) {
       .filter((e) => e.date === todayKey)
       .map(normalizeLocalEvent);
     const merged = [...gcalNormalized, ...localNormalized];
-    if (merged.length === 0) return makeFakeEvents();
     return merged.sort((a, b) => a.sortKey - b.sortKey);
   }, [calendar.connected, calendar.events, localEvents, todayKey]);
 
@@ -1057,69 +954,33 @@ export function Home(_props: HomeProps) {
               </g>
             </svg>
 
-            {/* Streak number — below the arc, so the summit can rise into the
-                hollow under the curve */}
-            {/* Negative margin lifts the number INTO the dome rather than stacking it below.
-                The arc's underside across the digits sits at about y=18.4, and the box is
-                89 tall, so marginTop must stay above about -66 or the number touches the
-                stroke. At -20 the number's top is at y=72, leaving ~54px of clearance.
-                Both figures derive from ARC_W, so a thinner stroke only adds clearance. */}
+            {/* The line sits in the hollow under the curve. No number: the gauge scale
+                already carries the value, and a dial does not need a digital readout.
+                The negative margin lifts it INTO the dome rather than stacking it below;
+                the arc's underside across the text is at about y=18.4 in a box 89 tall,
+                and both figures derive from ARC_W. */}
             <div style={{
-              marginTop: heroV2 ? -46 : -20,
+              marginTop: -26,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
+              padding: "0 var(--space-4)",
             }}>
               <span style={{
                 fontFamily: geist,
-                fontWeight: 700,
-                fontSize: heroV2 ? 52 : 64,
+                fontWeight: 600,
+                fontSize: 17,
+                // Solid, not translucent: this sits straight on a photographic sky, and
+                // translucent ink composites with whatever is behind it.
                 color: "#EAECF4",
-                lineHeight: 1,
-                letterSpacing: "-0.02em",
+                lineHeight: 1.2,
+                textAlign: "center",
                 textShadow: "0 2px 16px rgba(7,7,12,0.8)",
               }}>
-                {heroV2 ? progressPct : displayStreak}
-                {heroV2 && <span style={{ fontSize: 24, fontWeight: 600 }}>%</span>}
+                {planLoading ? "\u00a0" : planLine}
               </span>
-              {heroV2 && (
-                <span style={{
-                  fontFamily: geist,
-                  fontWeight: 500,
-                  fontSize: 13,
-                  color: "rgba(255,255,255,0.8)",
-                  marginTop: 7,
-                  textShadow: "0 1px 6px rgba(7,7,12,0.6)",
-                }}>
-                  {praiseFor(progressPct)}
-                </span>
-              )}
             </div>
           </div>
-          {!heroV2 && (
-          <span style={{
-            fontFamily: geist,
-            fontWeight: 600,
-            fontSize: 17,
-            color: "#EAECF4",
-            marginTop: 6,
-            textShadow: "0 1px 8px rgba(7,7,12,0.6)",
-          }}>
-            Day Streak
-          </span>
-          )}
-          {!heroV2 && (
-          <span style={{
-            fontFamily: geist,
-            fontWeight: 400,
-            fontSize: 13,
-            color: "rgba(255,255,255,0.75)",
-            marginTop: 3,
-            textShadow: "0 1px 6px rgba(7,7,12,0.6)",
-          }}>
-            Best: {displayBest} days
-          </span>
-          )}
         </div>
 
         {/* Next Up — inside the hero image */}
@@ -1140,6 +1001,9 @@ export function Home(_props: HomeProps) {
           </h2>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            {nextUpEvents.length === 0 && (
+              <p style={emptyLine}>{planLoading ? "\u00a0" : "Nothing scheduled today"}</p>
+            )}
             {nextUpEvents.map((event, i) => (
               <div key={event.id}>
                 {i > 0 && (
@@ -1352,7 +1216,7 @@ export function Home(_props: HomeProps) {
         </div>
       </section>
       {/* Tasks card */}
-      {displayTasks.length > 0 && (
+      {realTasks.length > 0 && (
         <section style={{ position: "relative", zIndex: 2 }}>
           <div style={{ ...tasksCard, padding: "20px 20px 16px" }}>
             <div style={{
@@ -1376,23 +1240,20 @@ export function Home(_props: HomeProps) {
                 fontSize: 14,
                 color: "rgba(234,236,244,0.4)",
               }}>
-                {displayTasks.filter((t) => usingFakeTasks ? (fakeTaskState[t.id] ?? t.done) : t.done).length} of {displayTasks.length}
+                {realTasks.filter((t) => t.done).length} of {realTasks.length}
               </span>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-              {displayTasks.map((task, i) => {
-                const isDone = usingFakeTasks ? (fakeTaskState[task.id] ?? task.done) : task.done;
+              {realTasks.map((task, i) => {
+                const isDone = task.done;
                 return (
                 <div key={task.id}>
                   {i > 0 && (
                     <div style={{ height: 1, background: "rgba(234,236,244,0.06)", margin: "10px 0" }} />
                   )}
                   <div
-                    onClick={() => usingFakeTasks
-                      ? setFakeTaskState((prev) => ({ ...prev, [task.id]: !isDone }))
-                      : toggleTask(task.id)
-                    }
+                    onClick={() => toggleTask(task.id)}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -1431,6 +1292,19 @@ export function Home(_props: HomeProps) {
                     }}>
                       {task.label}
                     </span>
+                    {/* The arc counts only what is planned for today, while this card lists
+                        every task. Without the day on the row the arc's number cannot be
+                        reconstructed, which is the spec's first anti-goal. */}
+                    <span style={{
+                      fontFamily: geist,
+                      fontSize: 11,
+                      fontWeight: 500,
+                      letterSpacing: "0.02em",
+                      whiteSpace: "nowrap",
+                      color: taskDayTone(task.dueDate, todayKey),
+                    }}>
+                      {taskDayLabel(task.dueDate, todayKey)}
+                    </span>
                   </div>
                 </div>
               );
@@ -1457,60 +1331,11 @@ export function Home(_props: HomeProps) {
           gridTemplateColumns: "1fr 1fr",
           gap: 12,
         }}>
-          {usingFakeHabits
-            ? FAKE_HABITS.map((fh) => {
-                const completed = fakeHabitState[fh.id] ?? fh.completed;
-                const colorSet = HABIT_COLORS[fh.color];
-                return (
-                  <div
-                    key={fh.id}
-                    style={{
-                      ...habitCard,
-                      padding: "14px 12px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div style={{
-                        width: 33, height: 33, borderRadius: 10,
-                        background: colorSet.bg,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>
-                        <HabitIcon name={fh.icon} size={20} color={colorSet.fill} />
-                      </div>
-                      <div
-                        onClick={() => setFakeHabitState((prev) => ({ ...prev, [fh.id]: !completed }))}
-                        style={{
-                          width: 24, height: 24, borderRadius: 6,
-                          border: completed ? `1px solid ${colorSet.fill}` : "1px solid #8E9BC4",
-                          background: completed ? colorSet.fill : "transparent",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          cursor: "pointer", transition: "background 200ms ease, border-color 200ms ease",
-                        }}
-                      >
-                        {completed && (
-                          <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
-                            <path d="M1 5L4.5 8.5L11 1.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontFamily: geist, fontWeight: 500, fontSize: 14, color: "#EAECF4", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {fh.name}
-                      </div>
-                      {fh.streak > 0 && (
-                        <div style={{ fontFamily: "Geist Mono, monospace", fontWeight: 400, fontSize: 8, color: "rgba(255,255,255,0.47)", marginTop: 2 }}>
-                          {fh.streak} day streak
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            : todaysHabits.map((habit) => {
+          {todaysHabits.length === 0 ? (
+            <p style={{ ...emptyLine, gridColumn: "1 / -1" }}>
+              {habitsLoading ? "\u00a0" : "No habits due today"}
+            </p>
+          ) : todaysHabits.map((habit) => {
                 const completed = isCompleted(habit.id);
                 const streak = getStreak(habit.id);
                 const colorSet = HABIT_COLORS[habit.color];
@@ -1564,111 +1389,6 @@ export function Home(_props: HomeProps) {
                 );
               })
           }
-        </div>
-      </section>
-
-      {/* Supplements section */}
-      <section style={{ position: "relative", zIndex: 2 }}>
-        <h2 style={{
-          fontFamily: geist,
-          fontWeight: 700,
-          fontSize: 14,
-          color: "#EAECF4",
-          margin: "0 0 16px 0",
-        }}>
-          Supplements
-        </h2>
-
-        <div style={{
-          display: "flex",
-          gap: 14,
-          overflowX: "auto",
-          paddingBottom: 4,
-          margin: "0 -16px",
-          padding: "0 16px",
-          WebkitOverflowScrolling: "touch",
-          scrollbarWidth: "none",
-        }}>
-          {FAKE_SUPPLEMENTS.map((sup) => {
-            const taken = fakeSupplementState[sup.id] ?? sup.taken;
-            return (
-              <div
-                key={sup.id}
-                style={{
-                  position: "relative",
-                  width: 154,
-                  height: 155,
-                  borderRadius: 20,
-                  overflow: "hidden",
-                  flexShrink: 0,
-                }}
-              >
-                <img
-                  src={sup.image}
-                  alt={sup.name}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                  }}
-                />
-                <div style={{
-                  position: "absolute",
-                  inset: 0,
-                  boxShadow: "inset 0 163px 4px 0 rgba(0,0,0,0.63)",
-                  borderRadius: 20,
-                }} />
-                {/* Checkbox */}
-                <div
-                  onClick={() => setFakeSupplementState((prev) => ({ ...prev, [sup.id]: !taken }))}
-                  style={{
-                    position: "absolute",
-                    top: 12,
-                    right: 12,
-                    width: 23,
-                    height: 23,
-                    borderRadius: 4,
-                    border: "1px solid white",
-                    background: taken ? "#8E9BC4" : "transparent",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                  }}
-                >
-                  {taken && (
-                    <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
-                      <path d="M1 5L4.5 8.5L11 1.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </div>
-                {/* Label */}
-                <div style={{
-                  position: "absolute",
-                  bottom: 12,
-                  left: 12,
-                }}>
-                  <div style={{
-                    fontFamily: geist,
-                    fontWeight: 700,
-                    fontSize: 14,
-                    color: "#EAECF4",
-                  }}>
-                    {sup.name}
-                  </div>
-                  <div style={{
-                    fontFamily: "Geist Mono, monospace",
-                    fontWeight: 600,
-                    fontSize: 10,
-                    color: "rgba(234,236,244,0.71)",
-                    marginTop: 1,
-                  }}>
-                    {sup.dosage}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
         </div>
       </section>
     </div>

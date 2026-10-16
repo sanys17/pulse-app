@@ -2,11 +2,9 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { expectRows } from "../lib/monitoring";
 import { useAuth } from "../context/AuthContext";
+import { cadenceFromRow, cadenceToRow, isDueOn } from "../lib/cadence";
+import { toDateKey } from "../lib/dateKey";
 import type { Habit, HabitInput, Completion, HabitColor } from "../types";
-
-function toDateKey(d: Date = new Date()): string {
-  return d.toISOString().slice(0, 10);
-}
 
 export function useHabits() {
   const { user } = useAuth();
@@ -33,7 +31,7 @@ export function useHabits() {
           name: h.name,
           icon: h.icon,
           color: h.color as HabitColor,
-          frequency: h.frequency as "daily" | "weekly",
+          cadence: cadenceFromRow(h),
           reminderTime: h.reminder_time ? h.reminder_time.slice(0, 5) : null,
           createdAt: h.created_at.slice(0, 10),
         })));
@@ -73,7 +71,7 @@ export function useHabits() {
         name: data.name,
         icon: data.icon,
         color: data.color,
-        frequency: data.frequency,
+        cadence: data.cadence,
         reminderTime: data.reminderTime ?? null,
         createdAt: toDateKey(),
       };
@@ -86,7 +84,7 @@ export function useHabits() {
           name: data.name,
           icon: data.icon,
           color: data.color,
-          frequency: data.frequency,
+          ...cadenceToRow(data.cadence),
           reminder_time: data.reminderTime ?? null,
         })
         .select()
@@ -112,11 +110,22 @@ export function useHabits() {
     async (id: string, data: Partial<Omit<Habit, "id" | "createdAt">>) => {
       setHabits((prev) => prev.map((h) => (h.id === id ? { ...h, ...data } : h)));
 
-      const updateData: { name?: string; icon?: string; color?: string; frequency?: string; reminder_time?: string | null } = {};
+      const updateData: {
+        name?: string;
+        icon?: string;
+        color?: string;
+        frequency?: string;
+        interval_days?: number | null;
+        start_date?: string | null;
+        weekdays?: number[] | null;
+        reminder_time?: string | null;
+      } = {};
       if (data.name !== undefined) updateData.name = data.name;
       if (data.icon !== undefined) updateData.icon = data.icon;
       if (data.color !== undefined) updateData.color = data.color;
-      if (data.frequency !== undefined) updateData.frequency = data.frequency;
+      // All four cadence columns move together; writing one without the others would
+      // leave a row the CHECK constraint in 013 rejects.
+      if (data.cadence !== undefined) Object.assign(updateData, cadenceToRow(data.cadence));
       if (data.reminderTime !== undefined) updateData.reminder_time = data.reminderTime;
 
       const { data: updated, error } = await supabase.from("habits").update(updateData).eq("id", id).select("id");
@@ -262,11 +271,7 @@ export function useHabits() {
   }, [todayKey]);
 
   const todaysHabits = useMemo(() => {
-    return habits.filter((h) => {
-      if (h.frequency === "daily") return true;
-      const day = new Date().getDay();
-      return day === 1;
-    });
+    return habits.filter((h) => isDueOn(h.cadence, todayKey));
   }, [habits, todayKey]);
 
   const todaysProgress = useMemo(() => {
@@ -277,9 +282,10 @@ export function useHabits() {
     return { done, total: todaysHabits.length };
   }, [todaysHabits, completions, todayKey]);
 
+  // "There are habits, just none due today" — the Home empty state reads differently
+  // from "you have no habits at all".
   const hasHiddenWeekly = useMemo(() => {
-    const day = new Date().getDay();
-    return day !== 1 && habits.some((h) => h.frequency === "weekly");
+    return habits.some((h) => !isDueOn(h.cadence, todayKey));
   }, [habits, todayKey]);
 
   const bestStreak = useMemo(() => {
