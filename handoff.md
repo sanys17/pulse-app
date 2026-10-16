@@ -5,9 +5,9 @@ Last updated: 2026-10-16. Update this file at the end of any session that change
 ## Status
 Deployed on Vercel from `master`. `npm run build`, `npx tsc -b` and `npm test` (94 tests) all pass.
 
-**Active branch is `feat/sky-backgrounds`, 24 commits, branched off `home-redesign-v2`** (which is itself 3 commits ahead of `master` and carries the Oura-style progress arc). Nothing is merged. The sky feature is functionally complete but **has never been run on a real device** — see "Animated sky backgrounds" below.
+**Active branch is `feat/sky-backgrounds`, 28 commits, branched off `home-redesign-v2`** (which is itself 3 commits ahead of `master` and carries the Oura-style progress arc). **The sky was verified on the iPhone by the user on 2026-10-16**, which cleared the branch's long-standing blocker, and it is now **open as PR #16** into `master`. Not merged.
 
-Corrections to earlier versions of this file, found 2026-10-15: the `home-redesign-v2` work *is* committed (it was described here as uncommitted), and PRs #8 and #15 are **merged**, not open. All PRs #1-#15 are closed or merged; there are no open PRs.
+Corrections to earlier versions of this file, found 2026-10-15: the `home-redesign-v2` work *is* committed (it was described here as uncommitted), and PRs #8 and #15 are **merged**, not open. PRs #1-#15 are all closed or merged; #16 is the only open one.
 
 | Area | State |
 |---|---|
@@ -59,20 +59,58 @@ fixed, deferred minors are listed in the plan's workspace under `.superpowers/sd
 (`morning_final`, `afternoon_final`, `galaxy`, `venus`/`mars`/`jupiter`/`saturn`) are
 deliberately untracked. Consider adding `public/assets/*.jpg` to `.gitignore`.
 
-**Outstanding on this branch**
-1. **No device verification at all.** Nothing here has been rendered by a browser on an
-   iPhone. Every tuned value — scrim 0.25, night gradient at 60%, galaxy opacity 0.4, planet
-   sizes, arc stroke 8 — was judged on a desktop monitor. This is the plan's stated blocker.
-2. **"Best: N days" fails contrast over the afternoon sky**: 4.0:1 against 4.5:1 needed. It is
-   `rgba(255,255,255,0.75)`, and translucent text composites with the sky behind it. Making it
-   solid `#EAECF4` fixes it. Recorded in `Home.tsx` above `SKY_IMAGES`.
-3. **The hero layout is undecided** — `?hero=v2` versus the current one.
-4. The arc fill was recoloured to the `#1C1C2A` family, which spans luminance ~18-42. If the
-   water motion is invisible at that darkness, the NeuroNoise shader has stopped earning its
-   WebGL context and a flat stroke would do.
-5. `src/App.tsx` still has the dev auth bypass (`if (!user && import.meta.env.PROD)`), and
-   `package.json` still lists the unused `react-circular-progressbar`. Both inherited from
-   `home-redesign-v2`, both out of scope for this branch, both must go before merging.
+**Resolved on 2026-10-16, before opening PR #16**
+1. Device verification done by the user. This was the branch's blocker.
+2. The arc was rebuilt. Its fill used the surface tokens, which made the completed half about
+   13x *darker* than the empty half — progress erased the arc rather than filling it, and the
+   NeuroNoise shader was animating black against black. The fill is now the accent family
+   (`#D8E0F7`/`#8E9BC4`/`#6B78A0`, brightness 0.8) over a dark channel at
+   `rgba(7,7,12,0.5)` that keeps the arc identical on all three skies; the track dropped to
+   `rgba(142,155,196,0.2)`; `ARC_W` went 8 to 6; and the scale became `0`/`100` at the
+   endpoints, rotated to the tangent, with dots at 20/40/60/80 on one ring, all derived from
+   `ARC_R`/`ARC_W` instead of pinned in CSS.
+3. The dev auth bypass is reverted, `react-circular-progressbar` is gone, the three
+   superseded mountain photographs are deleted, and `public/assets/*.jpg` is gitignored.
+
+**Still outstanding**
+1. **"Best: N days" fails contrast over the afternoon sky**: 4.0:1 against 4.5:1 needed. It is
+   `rgba(255,255,255,0.75)`, and translucent text composites with the sky behind it. The
+   progress-arc work below deletes this line entirely, so it is only worth fixing if that work
+   slips.
+2. **The hero layout question is settled but not implemented.** `?hero=v2` and the current
+   hero are both superseded by the progress-arc spec; the flag and both branches are still in
+   `Home.tsx`.
+3. Nine tracked assets in `public/assets` are referenced nowhere:
+   `afternoon.webp`, `morning.webp`, `night.webp`, `arc-fill.svg`, `arc-track.svg`,
+   `glow-ellipse.svg`, `fab-plus.svg`, `nav-left.svg`, `nav-social.svg`. Left in place
+   deliberately — deleting them was outside what was asked.
+
+## What the progress arc measures (spec and plan, nothing built)
+
+Spec: `docs/superpowers/specs/2026-10-16-progress-arc-design.md`. Plan:
+`docs/superpowers/plans/2026-10-16-progress-arc.md`. Both committed on `feat/sky-backgrounds`;
+no code is implemented.
+
+The arc currently measures habits only, which was an implementation default rather than a
+decision. It should measure **how much of today's plan is done**: habits due today plus tasks
+dated today or earlier and still open. Decided with the user:
+
+- Overdue tasks roll forward; missed habits do not. 100% is unreachable while anything is
+  overdue, deliberately.
+- Undated tasks are a backlog and never affect the arc.
+- No per-item weighting. Grouping is the user's lever instead.
+- The printed percentage goes (the gauge scale already carries the value) and so does the
+  streak, returning later with gamification. **Next Up stays.**
+- Inside the dome: one line stating what is left, informational rather than congratulatory.
+  A user-authored name may appear only at the start of a line or after a colon, is never
+  transformed, and is capped at 20 characters — the rule that keeps it safe in Czech.
+- Supplements are habits that need a cadence: every day / 2 days / 3 days / certain weekdays,
+  with a user-chosen start date. This also resolves the Monday hardcode for weekly habits.
+
+Needs migration `013` (a date and `completed_at` on tasks, cadence columns on habits) and
+touches `pending_notifications`. **The app is also meant to support Czech, and has no i18n
+layer whatsoever** — no library, no locale files. That is a project in its own right and
+nothing else in this file mentions it.
 
 ## Supabase (user runs SQL manually in the SQL Editor)
 Applied (evidenced by plans working in the app): `001_initial_schema.sql`, `003_social.sql`, `004_fix_plan_policies.sql`., `005_friend_profile_visibility.sql` (run by the user, 2026-10-09). `006_friendships_realtime.sql` and `007_social_realtime.sql` (run by the user, 2026-10-09; verified working with two accounts), `008_feed_reactions.sql` (run by the user). Not confirmed from the repo: whether Google OAuth is configured in Supabase and whether `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set in Vercel (the app throws on startup without them). Ask the user if sign-in or a deploy misbehaves.
@@ -101,18 +139,21 @@ Better Stack error tracking (US region; EU needs a paid plan), app `Pulse-web`. 
 10. `skyPhase` and `SKY_BOUNDARY_HOURS` both encode 5/11/18; `skyPhase` now derives from the shared table, but nothing asserts they agree.
 
 ## Next steps (suggested order)
-1. **Verify the sky on a real iPhone**, all three phases plus Reduce Motion plus a rare night
-   (use the dev flags). This is the only thing standing between the branch and a PR, and no
-   amount of further desktop tuning substitutes for it.
-2. Decide the hero layout (`?hero=v2` or current), then fix the "Best" line's contrast.
-3. Revert the auth bypass in `src/App.tsx`, drop `react-circular-progressbar`, delete the
-   superseded mountain photographs, then open the PR.
-4. Live updates for own-data tables (habits, completions, tasks, calendar events) with an echo
+1. **Review and merge PR #16.** The branch's blocker is cleared and the tree is clean.
+2. **Build the progress arc's meaning**, off `master`, following
+   `docs/superpowers/plans/2026-10-16-progress-arc.md`. The plan's own advice is to take it in
+   two halves: tasks 2, 5, 6, 7, 8 give the arc its new meaning; tasks 1, 3, 4, 9 add the habit
+   cadence and are about 45% of the work and most of the risk. Run `011` and `012` in the SQL
+   Editor first — per this file they have never been applied — then `013`.
+   The standing hazard in this project is unverified work piling up unmerged, so merge each
+   half before starting the next.
+3. Live updates for own-data tables (habits, completions, tasks, calendar events) with an echo
    guard.
-5. Design cleanup: tokens for accent/status colors, one glass recipe, contrast fixes.
-6. Finish verifying push notifications on a real iPhone: habit, event (two alerts), plan,
+4. Design cleanup: tokens for accent/status colors, one glass recipe, contrast fixes.
+5. Finish verifying push notifications on a real iPhone: habit, event (two alerts), plan,
    invitation, friend request, morning summary (runbook section 7).
-7. Add error surfacing to hooks (issue 3).
+6. Add error surfacing to hooks (issue 3).
+7. Decide when Czech happens. It needs an i18n layer that does not exist yet.
 
 ## Working with this repo
 - Tooling and rules live in `CLAUDE.md`; UI rules in `docs/design-system.md`. Git: branch, PR into `master`, do not push or merge without being asked.
