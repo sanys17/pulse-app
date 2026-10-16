@@ -55,3 +55,39 @@ export function cadenceLabel(cadence: Cadence): string {
       return [...cadence.days].sort((a, b) => a - b).map((d) => WEEKDAY_NAMES[d]).join(", ");
   }
 }
+
+// The shape the habits table stores a cadence in. Kept here rather than in the hook so the
+// mapping is covered by the same tests as the rules it feeds.
+export interface CadenceRow {
+  frequency: string;
+  interval_days: number | null;
+  start_date: string | null;
+  weekdays: number[] | null;
+}
+
+export function cadenceToRow(cadence: Cadence): CadenceRow {
+  switch (cadence.kind) {
+    case "daily":
+      return { frequency: "daily", interval_days: null, start_date: null, weekdays: null };
+    case "interval":
+      return { frequency: "interval", interval_days: cadence.days, start_date: cadence.startDate, weekdays: null };
+    case "weekdays":
+      return { frequency: "weekdays", interval_days: null, start_date: null, weekdays: [...cadence.days] };
+  }
+}
+
+// Deliberately forgiving. Until the user runs migration 013 the cadence columns do not
+// exist, so `select *` returns rows without them, and rows still say "weekly". Falling back
+// to daily keeps a habit visible; the alternative — a cadence that matches nothing — would
+// make habits silently vanish from the day.
+export function cadenceFromRow(row: CadenceRow): Cadence {
+  if (row.frequency === "interval" && row.interval_days != null && row.start_date != null) {
+    return { kind: "interval", days: row.interval_days, startDate: row.start_date };
+  }
+  if (row.frequency === "weekdays" && row.weekdays != null && row.weekdays.length > 0) {
+    return { kind: "weekdays", days: [...row.weekdays] };
+  }
+  // Pre-013 rows: "weekly" meant Monday, which is exactly what useHabits hardcoded.
+  if (row.frequency === "weekly") return { kind: "weekdays", days: [1] };
+  return { kind: "daily" };
+}

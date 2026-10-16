@@ -122,7 +122,7 @@ export function Calendar() {
   }, [gcal.events]);
 
   const dailyHabitCount = useMemo(() => {
-    return habits.filter((h) => h.frequency === "daily").length;
+    return habits.filter((h) => h.cadence.kind === "daily").length;
   }, [habits]);
 
   const selectedHabitCompletions = useMemo(() => {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { HABIT_COLORS, HABIT_ICONS } from "../types";
-import type { Habit, HabitColor, HabitInput } from "../types";
+import type { Habit, HabitColor, HabitInput, Cadence } from "../types";
 import { SelectField } from "./SelectField";
 import { timeOptions } from "../lib/notificationPrefs.ts";
 import { IconPicker } from "./IconPicker";
@@ -17,9 +17,12 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
   const [name, setName] = useState(habit?.name ?? "");
   const [icon, setIcon] = useState(habit?.icon ?? HABIT_ICONS[0]);
   const [color, setColor] = useState<HabitColor>(habit?.color ?? "green");
-  const [frequency, setFrequency] = useState<"daily" | "weekly">(
-    habit?.frequency ?? "daily"
-  );
+  const [cadence, setCadence] = useState<Cadence>(habit?.cadence ?? { kind: "daily" });
+  // Task 4 replaces this control with the four real options; until then the two old
+  // choices map onto the cadence model so behaviour is unchanged.
+  const frequency: "daily" | "weekly" = cadence.kind === "daily" ? "daily" : "weekly";
+  const setFrequency = (f: "daily" | "weekly") =>
+    setCadence(f === "daily" ? { kind: "daily" } : { kind: "weekdays", days: [1] });
   const [reminderTime, setReminderTime] = useState(habit?.reminderTime ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -29,7 +32,7 @@ export function HabitForm({ habit, onSave, onDelete, onClose }: HabitFormProps) 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onSave({ name: name.trim(), icon, color, frequency, reminderTime: reminderTime || null });
+    onSave({ name: name.trim(), icon, color, cadence, reminderTime: reminderTime || null });
   };
 
   const handleDelete = () => {
