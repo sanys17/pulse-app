@@ -90,6 +90,24 @@ $$;
 --   for all using (auth.uid() = user_id) with check (auth.uid() = user_id)
 -- from 001, which covers the new columns.
 
+-- Fix to 012: self_joined could be set to NULL ---------------------------------
+
+-- 012's trigger does:
+--   new.self_joined := new.user_id = auth.uid() and not exists (...)
+-- With no JWT, auth.uid() is NULL, so the comparison is NULL rather than false and
+-- the whole expression is NULL — which violates self_joined's NOT NULL constraint.
+-- Every insert into plan_members without an auth context fails: the SQL Editor, the
+-- test file, anything running as the service role. Clients were unaffected, which is
+-- why this survived review.
+create or replace function public.mark_self_joined() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  new.self_joined := coalesce(new.user_id = auth.uid(), false)
+    and not exists (select 1 from public.shared_plans sp where sp.id = new.plan_id and sp.creator_id = new.user_id);
+  return new;
+end;
+$$;
+
 -- Notifications follow the cadence --------------------------------------------
 
 -- Redefines the notification rules from 011. Only the two habit due-ness predicates
